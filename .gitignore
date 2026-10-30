@@ -1,0 +1,15 @@
+.venv/
+.build-venv/
+__pycache__/
+*.py[cod]
+build/
+dist/
+*.spec
+*.log
+*.sqlite3
+*.sqlite3-*
+*.db
+.env
+.DS_Store
+Thumbs.db
+prompts.json
