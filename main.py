@@ -6,15 +6,18 @@ import sys
 import unicodedata
 from pathlib import Path
 from datetime import datetime
-from PySide6.QtCore import Qt, QStandardPaths
+from PySide6.QtCore import Qt, QStandardPaths, QPropertyAnimation, QEasingCurve
 from PySide6.QtGui import QAction, QKeySequence, QIcon, QPixmap
 from PySide6.QtWidgets import (QApplication, QMainWindow, QWidget, QVBoxLayout,
     QHBoxLayout, QFormLayout, QLineEdit, QPlainTextEdit, QComboBox, QCheckBox,
     QPushButton, QListWidget, QListWidgetItem, QSplitter, QLabel, QMessageBox,
     QFileDialog, QDialog, QDialogButtonBox)
 
+from i18n import tr, LANGUAGES
+from visual import STYLE as OWL_STYLE, preferences, glow, animate
+
 APP_NAME = 'Prompchu'
-VERSION = '1.0.0'
+VERSION = '1.1.0-preview'
 ASSETS = Path(__file__).resolve().parent / 'assets'
 
 FIELDS = ('name', 'tags', 'genres', 'category', 'model', 'prompt', 'negative', 'notes', 'favorite')
@@ -69,15 +72,15 @@ class Store:
 class Editor(QDialog):
     def __init__(self, parent, data=None):
         super().__init__(parent)
-        self.setWindowTitle('Editar prompt' if data else 'Novo prompt')
+        self.setWindowTitle(tr('Editar prompt') if data else tr('Novo prompt'))
         self.resize(740, 780)
         outer = QVBoxLayout(self)
         form = QFormLayout()
         self.inputs = {}
-        labels = {'name':'Nome *', 'tags':'Tags (separadas por vírgula)', 'genres':'Gêneros (separados por vírgula)', 'category':'Categoria', 'model':'Modelo / ferramenta', 'prompt':'Prompt *', 'negative':'Prompt negativo', 'notes':'Notas', 'favorite':'Favorito'}
+        labels = {'name':tr('Nome *'), 'tags':tr('Tags (separadas por vírgula)'), 'genres':tr('Gêneros (separados por vírgula)'), 'category':tr('Categoria'), 'model':tr('Modelo / ferramenta'), 'prompt':'Prompt *', 'negative':tr('Prompt negativo'), 'notes':tr('Notas'), 'favorite':tr('Favorito')}
         for key in FIELDS:
             if key == 'favorite':
-                field = QCheckBox('Marcar como favorito')
+                field = QCheckBox(tr('Marcar como favorito'))
                 field.setChecked(bool((data or {}).get(key, False)))
             elif key in ('prompt', 'negative', 'notes'):
                 field = QPlainTextEdit()
@@ -86,13 +89,13 @@ class Editor(QDialog):
             else:
                 field = QLineEdit((data or {}).get(key, ''))
             self.inputs[key] = field
-            form.addRow(labels[key], field)
+            form.addRow(tr(labels[key]), field)
         self.inputs['category'].setPlaceholderText('Imagem, Texto, Vídeo, Código…')
         self.inputs['genres'].setPlaceholderText('Fantasia, Romance, Ficção científica…')
         outer.addLayout(form)
         buttons = QDialogButtonBox(QDialogButtonBox.Save | QDialogButtonBox.Cancel)
-        buttons.button(QDialogButtonBox.Save).setText('Salvar')
-        buttons.button(QDialogButtonBox.Cancel).setText('Cancelar')
+        buttons.button(QDialogButtonBox.Save).setText(tr('Salvar'))
+        buttons.button(QDialogButtonBox.Cancel).setText(tr('Cancelar'))
         buttons.accepted.connect(self.check)
         buttons.rejected.connect(self.reject)
         outer.addWidget(buttons)
@@ -110,29 +113,56 @@ class Window(QMainWindow):
     def __init__(self, path):
         super().__init__()
         self.store = Store(path)
+        self.database_path = path
+        self.setStyleSheet(OWL_STYLE)
         self.setWindowTitle(APP_NAME)
         self.setWindowIcon(QIcon(str(ASSETS / 'prompchu-cabeca.ico')))
         self.resize(1180, 760)
         root = QWidget()
         self.setCentralWidget(root)
         layout = QVBoxLayout(root)
+        layout.setContentsMargins(26, 22, 26, 14)
+        layout.setSpacing(18)
         brand = QHBoxLayout()
         logo = QLabel()
         logo.setPixmap(QPixmap(str(ASSETS / 'prompchu-corujinha.png')).scaled(64, 64, Qt.KeepAspectRatio, Qt.SmoothTransformation))
         brand.addWidget(logo)
-        heading = QLabel('Prompchu · Seu banco de prompts')
-        heading.setStyleSheet('font-size:24px; font-weight:700; color:#a6c8ff; padding:8px')
+        heading = QLabel(tr('Prompchu · Seu banco de prompts'))
+        heading.setStyleSheet('font-size:24px; font-weight:700; color:#ffd2a1; padding:8px')
         brand.addWidget(heading, 1)
         layout.addLayout(brand)
+        settings = preferences()
+        controls = QHBoxLayout()
+        self.language = QComboBox()
+        for code, name in LANGUAGES.items(): self.language.addItem(name, code)
+        self.language.setCurrentIndex(max(0, self.language.findData(settings.value('language','pt'))))
+        controls.addWidget(QLabel(tr(tr('Idioma'))))
+        controls.addWidget(self.language)
+        controls.addStretch()
+        self.neon = QCheckBox(tr(tr('Neon')))
+        self.motion = QCheckBox(tr(tr('Animações')))
+        self.neon.setChecked(settings.value('neon', True, type=bool))
+        self.motion.setChecked(settings.value('motion', True, type=bool))
+        controls.addWidget(self.neon)
+        controls.addWidget(self.motion)
+        layout.addLayout(controls)
+        self.halo = glow(logo, self.neon.isChecked())
+        self.animation = QPropertyAnimation(self.halo, b'blurRadius', self)
+        self.animation.setDuration(600)
+        self.animation.setEasingCurve(QEasingCurve.OutCubic)
+        self.neon.toggled.connect(self.effects)
+        self.motion.toggled.connect(self.effects)
+        self.language.currentIndexChanged.connect(self.change_language)
         bar = QHBoxLayout()
-        for label, callback in [('Novo', self.new), ('Editar', self.edit), ('Duplicar', self.duplicate), ('Excluir', self.delete), ('Importar JSON', self.import_json), ('Exportar JSON', self.export_json), ('Backup do banco', self.backup)]:
-            button = QPushButton(label)
+        for label, callback in [(tr('Novo'), self.new), (tr('Editar'), self.edit), (tr('Duplicar'), self.duplicate), (tr('Excluir'), self.delete), (tr('Importar JSON'), self.import_json), (tr('Exportar JSON'), self.export_json), (tr('Backup do banco'), self.backup)]:
+            button = QPushButton(tr(label))
+            if callback == self.new: button.setObjectName("primary")
             button.clicked.connect(callback)
             bar.addWidget(button)
         layout.addLayout(bar)
         filters = QHBoxLayout()
         self.search = QLineEdit()
-        self.search.setPlaceholderText('Buscar por nome, texto, tags, gêneros, notas…')
+        self.search.setPlaceholderText(tr('Buscar por nome, texto, tags, gêneros, notas…'))
         filters.addWidget(self.search, 3)
         self.category = QComboBox()
         self.genre = QComboBox()
@@ -140,7 +170,7 @@ class Window(QMainWindow):
         for box in (self.category, self.genre, self.tag):
             filters.addWidget(box, 1)
             box.currentIndexChanged.connect(self.refresh)
-        self.favorites = QCheckBox('Favoritos')
+        self.favorites = QCheckBox(tr('Favoritos'))
         filters.addWidget(self.favorites)
         layout.addLayout(filters)
         self.search.textChanged.connect(self.refresh)
@@ -152,7 +182,7 @@ class Window(QMainWindow):
         split.addWidget(self.items)
         panel = QWidget()
         right = QVBoxLayout(panel)
-        self.title = QLabel('Selecione um prompt ou clique em Novo')
+        self.title = QLabel(tr('Selecione um prompt ou clique em Novo'))
         self.title.setWordWrap(True)
         self.title.setStyleSheet('font-size:20px; font-weight:600')
         self.meta = QLabel()
@@ -165,11 +195,12 @@ class Window(QMainWindow):
         right.addWidget(self.prompt, 3)
         self.extra = QPlainTextEdit()
         self.extra.setReadOnly(True)
-        right.addWidget(QLabel('Prompt negativo e notas'))
+        right.addWidget(QLabel(tr('Prompt negativo e notas')))
         right.addWidget(self.extra, 1)
         actions = QHBoxLayout()
-        for label, callback in [('Copiar prompt', self.copy), ('Alternar favorito', self.favorite)]:
-            button = QPushButton(label)
+        for label, callback in [(tr('Copiar prompt'), self.copy), (tr('Alternar favorito'), self.favorite)]:
+            button = QPushButton(tr(label))
+            if callback == self.new: button.setObjectName("primary")
             button.clicked.connect(callback)
             actions.addWidget(button)
         right.addLayout(actions)
@@ -183,16 +214,33 @@ class Window(QMainWindow):
             action.triggered.connect(callback)
             self.addAction(action)
         self.reload()
+    def effects(self):
+        settings = preferences()
+        settings.setValue('neon', self.neon.isChecked())
+        settings.setValue('motion', self.motion.isChecked())
+        self.animation.stop()
+        self.halo.setEnabled(self.neon.isChecked())
+        self.halo.setBlurRadius(26)
+        if self.neon.isChecked(): animate(self)
+
+    def change_language(self):
+        preferences().setValue('language', self.language.currentData())
+        replacement = Window(self.database_path)
+        replacement.setGeometry(self.geometry())
+        QApplication.instance().prompchu_window = replacement
+        replacement.show()
+        self.close()
+
     def selected(self):
         item = self.items.currentItem()
         return item.data(Qt.UserRole) if item else None
     def reload(self, select=None):
         self.rows = self.store.all()
-        for box, key, label in [(self.category,'category','Todas as categorias'), (self.genre,'genres','Todos os gêneros'), (self.tag,'tags','Todas as tags')]:
+        for box, key, label in [(self.category,'category',tr('Todas as categorias')), (self.genre,'genres',tr('Todos os gêneros')), (self.tag,'tags',tr('Todas as tags'))]:
             old = box.currentData()
             box.blockSignals(True)
             box.clear()
-            box.addItem(label, None)
+            box.addItem(tr(label), None)
             options = set()
             for row in self.rows:
                 options.update(terms(row[key]) if key != 'category' else [row[key]] if row[key] else [])
@@ -217,7 +265,7 @@ class Window(QMainWindow):
                 continue
             if any(box.currentData() and box.currentData() not in terms(row[key]) for box,key in [(self.genre,'genres'),(self.tag,'tags')]):
                 continue
-            item = QListWidgetItem(('★ ' if row['favorite'] else '') + row['name'] + '\n' + (row['category'] or 'Sem categoria') + (' · '+row['tags'] if row['tags'] else ''))
+            item = QListWidgetItem(('★ ' if row['favorite'] else '') + row['name'] + '\n' + (row['category'] or tr('Sem categoria')) + (' · '+row['tags'] if row['tags'] else ''))
             item.setData(Qt.UserRole, row)
             self.items.addItem(item)
             if row['id'] == identifier:
@@ -227,8 +275,9 @@ class Window(QMainWindow):
         self.detail()
         self.statusBar().showMessage(f'{self.items.count()} exibidos / {len(self.rows)} prompts • Banco: {DB_PATH}')
     def detail(self, *_):
+        if hasattr(self, "animation") and self.neon.isChecked(): animate(self)
         row = self.selected()
-        self.title.setText(row['name'] if row else 'Selecione um prompt ou clique em Novo')
+        self.title.setText(row['name'] if row else tr('Selecione um prompt ou clique em Novo'))
         self.title.setTextFormat(Qt.PlainText)
         self.meta.setTextFormat(Qt.PlainText)
         self.meta.setText(('Categoria: '+row['category']+' | Modelo: '+row['model']+'\nGêneros: '+row['genres']+'\nTags: '+row['tags']+'\nAtualizado: '+row['updated']) if row else '')
@@ -266,7 +315,7 @@ class Window(QMainWindow):
     def copy(self):
         if self.selected():
             QApplication.clipboard().setText(self.selected()['prompt'])
-            self.statusBar().showMessage('Prompt copiado!', 3000)
+            self.statusBar().showMessage(tr('Prompt copiado!'), 3000)
     def export_json(self):
         path, _ = QFileDialog.getSaveFileName(self, 'Exportar todos os prompts', 'prompts.json', 'JSON (*.json)')
         if path:

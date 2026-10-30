@@ -128,3 +128,7 @@ Os ICOs contêm resoluções de 16 a 256 pixels. As imagens foram criadas com au
 Esta é a base inicial do Prompchu, versão **1.0.0**. Sugestões e problemas podem ser registrados nas Issues. Não envie bancos ou exports contendo informações privadas.
 
 PySide6/Qt são dependências de terceiros com licenças próprias: consulte a [documentação do Qt for Python](https://doc.qt.io/qtforpython-6/). Este projeto ainda não declara uma licença de distribuição para seu código e arte.
+
+## Preview Owl Neon
+
+Branch de testes: `testes/owl-neon`. Tema roxo, coral e dourado; brilho neon e transições com controles independentes e preferências persistentes. Seletor de 10 idiomas para navegação e editor: português, inglês, espanhol, francês, alemão, italiano, japonês, coreano, chinês simplificado e russo. Trocar idioma recria a janela; prompts e categorias do usuário não são traduzidos. Mensagens técnicas e parte dos diálogos de importação/backup ainda usam português nesta prévia.
