@@ -50,6 +50,20 @@ class AppearanceTests(unittest.TestCase):
         self.w.motion.setChecked(True);self.w.neon.setChecked(True)
         self.w.hide();self.app.processEvents()
         self.assertFalse(self.w.lights.timer.isActive())
+    def test_wordmark_fault_is_per_letter_and_can_stop(self):
+        sign=self.w.wordmark
+        self.assertEqual(sign.face.family(),'Fredoka')
+        sign.rng.seed(17)
+        sign.step()
+        self.assertIn(sign.dim_letter, range(8))
+        sign.step()
+        self.assertIsNone(sign.dim_letter)
+        sign.configure(True,False)
+        self.assertFalse(sign.timer.isActive())
+        self.assertIsNone(sign.dim_letter)
+        sign.configure(False,True)
+        self.assertFalse(sign.timer.isActive())
+
     def test_all_languages_and_scrollable_editor(self):
         for code in LANGUAGES:
             preferences().setValue('language',code)

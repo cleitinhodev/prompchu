@@ -13,11 +13,13 @@ from PySide6.QtWidgets import (QApplication, QMainWindow, QWidget, QVBoxLayout,
     QPushButton, QListWidget, QListWidgetItem, QSplitter, QLabel, QMessageBox,
     QFileDialog, QDialog, QDialogButtonBox, QFrame, QTabWidget, QMenu, QScrollArea)
 
+from about import AboutDialog
+from wordmark import Wordmark
 from i18n import tr, LANGUAGES
 from visual import STYLE as OWL_STYLE, preferences, Lights
 
 APP_NAME = 'Prompchu'
-VERSION = '1.2.0-preview'
+VERSION = '1.2.0'
 ASSETS = Path(__file__).resolve().parent / 'assets'
 
 FIELDS = ('name', 'tags', 'genres', 'category', 'model', 'prompt', 'negative', 'notes', 'favorite')
@@ -135,7 +137,7 @@ class Window(QMainWindow):
         logo.setPixmap(QPixmap(str(ASSETS / 'prompchu-corujinha.png')).scaled(76,76,Qt.KeepAspectRatio,Qt.SmoothTransformation))
         brand.addWidget(logo)
         titles = QVBoxLayout()
-        heading = QLabel('Prompchu'); heading.setObjectName('brand')
+        heading = Wordmark(self); self.wordmark=heading
         subtitle = QLabel(tr('Seu próximo resultado começa com uma boa ideia.')); subtitle.setObjectName('muted')
         titles.addWidget(heading);titles.addWidget(subtitle);brand.addLayout(titles,1)
         self.new_button = QPushButton('+  '+tr('Novo prompt'));self.new_button.setObjectName('primary')
@@ -145,6 +147,7 @@ class Window(QMainWindow):
         for label, callback in [('Importar JSON',self.import_json),('Exportar JSON',self.export_json),('Backup do banco',self.backup)]:
             menu.addAction(tr(label),callback)
         menu_button.setMenu(menu);brand.addWidget(menu_button)
+        about_button=QPushButton(tr('Sobre'));about_button.clicked.connect(self.show_about);brand.addWidget(about_button)
         layout.addWidget(header)
         settings=preferences()
         controls=QHBoxLayout()
@@ -209,6 +212,9 @@ class Window(QMainWindow):
         if splitter_state is not None: self.split.restoreState(splitter_state)
         self.statusBar().setToolTip(str(self.database_path))
 
+    def show_about(self):
+        AboutDialog(self, VERSION).exec()
+
     def clear_filters(self):
         self.search.clear();self.favorites.setChecked(False)
         for box in (self.category,self.genre,self.tag): box.setCurrentIndex(0)
@@ -222,6 +228,7 @@ class Window(QMainWindow):
         settings=preferences()
         settings.setValue('neon',self.neon.isChecked());settings.setValue('motion',self.motion.isChecked())
         self.lights.configure(self.neon.isChecked(),self.motion.isChecked())
+        self.wordmark.configure(self.neon.isChecked(),self.motion.isChecked())
         self.focus_light(None,QApplication.focusWidget())
 
     def change_language(self):
@@ -375,6 +382,7 @@ class Window(QMainWindow):
     def closeEvent(self, event):
         preferences().setValue('geometry',self.saveGeometry())
         preferences().setValue('splitter',self.split.saveState())
+        self.wordmark.reset()
         self.lights.timer.stop()
         QApplication.instance().focusChanged.disconnect(self.focus_light)
         self.store.db.close()
@@ -398,9 +406,17 @@ if __name__ == '__main__':
     app.setStyle('Fusion')
     app.setStyleSheet(OWL_STYLE)
     try:
-        DB_PATH = data_path()
+        if '--smoke-test' in sys.argv:
+            import tempfile
+            from PySide6.QtCore import QTimer
+            smoke_folder = tempfile.TemporaryDirectory()
+            DB_PATH = Path(smoke_folder.name) / 'smoke.sqlite3'
+        else:
+            DB_PATH = data_path()
         window = Window(DB_PATH)
         window.show()
+        if '--smoke-test' in sys.argv:
+            QTimer.singleShot(500, window.close)
         sys.exit(app.exec())
     except (OSError, sqlite3.Error) as error:
         QMessageBox.critical(None, 'Não foi possível abrir o banco', str(error))

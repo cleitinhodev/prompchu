@@ -126,13 +126,13 @@ Os ICOs contêm resoluções de 16 a 256 pixels. As imagens foram criadas com au
 
 ## Desenvolvimento
 
-Esta é a base inicial do Prompchu, versão **1.0.0**. Sugestões e problemas podem ser registrados nas Issues. Não envie bancos ou exports contendo informações privadas.
+Esta é a base inicial do Prompchu, versão **1.2.0**. Sugestões e problemas podem ser registrados nas Issues. Não envie bancos ou exports contendo informações privadas.
 
 PySide6/Qt são dependências de terceiros com licenças próprias: consulte a [documentação do Qt for Python](https://doc.qt.io/qtforpython-6/). Este projeto ainda não declara uma licença de distribuição para seu código e arte.
 
-## Preview Owl Studio — 1.2.0
+## Owl Studio — 1.2.0
 
-Branch de testes: `testes/owl-neon`. A `main` permanece com a versão base.
+Owl Studio agora é a versão principal na `main`. A branch `testes/owl-neon` fica disponível para experimentação.
 
 ![Interface Owl Studio, com registros fictícios](preview-owl-studio.png)
 
@@ -150,3 +150,11 @@ Branch de testes: `testes/owl-neon`. A `main` permanece com a versão base.
 O Renemya serviu de referência de aparência e comportamento; a implementação dos efeitos nesta versão é própria. Banco SQLite e formato JSON foram preservados, sem migração destrutiva.
 
 Validação: testes de persistência, validação e rollback; testes de filtros, cópia literal, abas, estados vazios, controles de efeitos e abertura nos dez idiomas. Capturas e verificações de interface usam Qt offscreen; não substituem teste manual do executável em Windows.
+
+## Releases Windows, Linux e macOS
+
+Baixe os pacotes em [Releases](https://github.com/cleitinhodev/prompchu/releases). Consulte as instruções e os requisitos de cada sistema nas notas do release. O workflow `Release desktop` compila nativamente em Windows, Ubuntu 22.04 e macOS 14 (Apple Silicon), testa cada pacote e só publica quando os três terminam com sucesso. Atualizar `VERSION` na `main` inicia uma nova publicação.
+
+Cada release inclui `SHA256SUMS.txt`: os hashes permitem comparar a integridade dos arquivos baixados com os publicados. Eles não substituem assinatura de autor; esta versão não tem certificado Authenticode nem notarização Apple.
+
+O título usa a fonte Fredoka, distribuída com sua licença SIL Open Font License em `assets/fonts/OFL.txt` ([origem](https://github.com/google/fonts/tree/main/ofl/fredoka)). Apenas uma letra por vez apresenta falhas suaves de luminosidade, com intervalos aleatórios. O efeito pausa com a janela inativa e respeita os controles Neon e Animações.
