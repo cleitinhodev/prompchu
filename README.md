@@ -72,11 +72,12 @@ O workflow `.github/workflows/windows-build.yml` também testa e compila a vers�
 | Ctrl+N | Novo prompt |
 | Ctrl+E | Editar selecionado |
 | Ctrl+F | Focar busca |
+| Ctrl+Shift+C | Copiar prompt selecionado |
 | Duplo clique | Editar selecionado |
 
 ## Dados, privacidade e backups
 
-Os dados ficam no seu computador. O caminho do banco aparece no rodapé. O identificador interno `BancoDePrompts` foi mantido para **continuar usando os dados da versão anterior**; o nome exibido é Prompchu.
+Os dados ficam no seu computador. O caminho do banco aparece na dica ao passar o mouse sobre o rodapé. O identificador interno `BancoDePrompts` foi mantido para **continuar usando os dados da versão anterior**; o nome exibido é Prompchu.
 
 No Windows, a localização usual é `%APPDATA%\Bugzinho\BancoDePrompts\prompts.sqlite3`.
 
@@ -129,6 +130,23 @@ Esta é a base inicial do Prompchu, versão **1.0.0**. Sugestões e problemas po
 
 PySide6/Qt são dependências de terceiros com licenças próprias: consulte a [documentação do Qt for Python](https://doc.qt.io/qtforpython-6/). Este projeto ainda não declara uma licença de distribuição para seu código e arte.
 
-## Preview Owl Neon
+## Preview Owl Studio — 1.2.0
 
-Branch de testes: `testes/owl-neon`. Tema roxo, coral e dourado; brilho neon e transições com controles independentes e preferências persistentes. Seletor de 10 idiomas para navegação e editor: português, inglês, espanhol, francês, alemão, italiano, japonês, coreano, chinês simplificado e russo. Trocar idioma recria a janela; prompts e categorias do usuário não são traduzidos. Mensagens técnicas e parte dos diálogos de importação/backup ainda usam português nesta prévia.
+Branch de testes: `testes/owl-neon`. A `main` permanece com a versão base.
+
+![Interface Owl Studio, com registros fictícios](preview-owl-studio.png)
+
+- Cabeçalho em degradê, painéis roxos, ações em coral e detalhes dourados da corujinha.
+- Biblioteca lateral com filtros combináveis, favoritos, contador de resultados e botão para limpar filtros.
+- Leitura com abas separadas para prompt, negativo e notas; contagem de caracteres e palavras.
+- Ações indisponíveis ficam desativadas quando não há seleção; textos do usuário são exibidos literalmente.
+- Editor com rolagem para manter Salvar e Cancelar acessíveis em telas menores.
+- Menu Biblioteca reúne importação, exportação e backup.
+- Neon desenhado nas bordas com relógio compartilhado a aproximadamente 30 fps. Pausa quando a janela está escondida, minimizada ou sem foco.
+- Neon e animações independentes: desligar movimento mantém um contorno estático; desligar neon remove os efeitos.
+- Preferências, tamanho da janela e divisão dos painéis persistentes. A troca de idioma preserva busca, filtros, seleção e aba.
+- Dez idiomas para navegação e editor: português, inglês, espanhol, francês, alemão, italiano, japonês, coreano, chinês simplificado e russo. Mensagens técnicas e parte dos diálogos de importação/backup ainda usam português nesta prévia.
+
+O Renemya serviu de referência de aparência e comportamento; a implementação dos efeitos nesta versão é própria. Banco SQLite e formato JSON foram preservados, sem migração destrutiva.
+
+Validação: testes de persistência, validação e rollback; testes de filtros, cópia literal, abas, estados vazios, controles de efeitos e abertura nos dez idiomas. Capturas e verificações de interface usam Qt offscreen; não substituem teste manual do executável em Windows.

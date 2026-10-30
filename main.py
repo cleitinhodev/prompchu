@@ -6,18 +6,18 @@ import sys
 import unicodedata
 from pathlib import Path
 from datetime import datetime
-from PySide6.QtCore import Qt, QStandardPaths, QPropertyAnimation, QEasingCurve
+from PySide6.QtCore import Qt, QStandardPaths
 from PySide6.QtGui import QAction, QKeySequence, QIcon, QPixmap
 from PySide6.QtWidgets import (QApplication, QMainWindow, QWidget, QVBoxLayout,
     QHBoxLayout, QFormLayout, QLineEdit, QPlainTextEdit, QComboBox, QCheckBox,
     QPushButton, QListWidget, QListWidgetItem, QSplitter, QLabel, QMessageBox,
-    QFileDialog, QDialog, QDialogButtonBox)
+    QFileDialog, QDialog, QDialogButtonBox, QFrame, QTabWidget, QMenu, QScrollArea)
 
 from i18n import tr, LANGUAGES
-from visual import STYLE as OWL_STYLE, preferences, glow, animate
+from visual import STYLE as OWL_STYLE, preferences, Lights
 
 APP_NAME = 'Prompchu'
-VERSION = '1.1.0-preview'
+VERSION = '1.2.0-preview'
 ASSETS = Path(__file__).resolve().parent / 'assets'
 
 FIELDS = ('name', 'tags', 'genres', 'category', 'model', 'prompt', 'negative', 'notes', 'favorite')
@@ -73,9 +73,14 @@ class Editor(QDialog):
     def __init__(self, parent, data=None):
         super().__init__(parent)
         self.setWindowTitle(tr('Editar prompt') if data else tr('Novo prompt'))
-        self.resize(740, 780)
+        self.resize(800, 680)
+        self.setMinimumSize(620, 480)
+        self.setStyleSheet(OWL_STYLE)
         outer = QVBoxLayout(self)
-        form = QFormLayout()
+        scroll = QScrollArea(); scroll.setWidgetResizable(True)
+        body = QWidget(); form = QFormLayout(body)
+        form.setSpacing(12)
+        scroll.setWidget(body)
         self.inputs = {}
         labels = {'name':tr('Nome *'), 'tags':tr('Tags (separadas por vírgula)'), 'genres':tr('Gêneros (separados por vírgula)'), 'category':tr('Categoria'), 'model':tr('Modelo / ferramenta'), 'prompt':'Prompt *', 'negative':tr('Prompt negativo'), 'notes':tr('Notas'), 'favorite':tr('Favorito')}
         for key in FIELDS:
@@ -92,9 +97,10 @@ class Editor(QDialog):
             form.addRow(tr(labels[key]), field)
         self.inputs['category'].setPlaceholderText('Imagem, Texto, Vídeo, Código…')
         self.inputs['genres'].setPlaceholderText('Fantasia, Romance, Ficção científica…')
-        outer.addLayout(form)
+        outer.addWidget(scroll, 1)
         buttons = QDialogButtonBox(QDialogButtonBox.Save | QDialogButtonBox.Cancel)
         buttons.button(QDialogButtonBox.Save).setText(tr('Salvar'))
+        buttons.button(QDialogButtonBox.Save).setObjectName('primary')
         buttons.button(QDialogButtonBox.Cancel).setText(tr('Cancelar'))
         buttons.accepted.connect(self.check)
         buttons.rejected.connect(self.reject)
@@ -117,116 +123,119 @@ class Window(QMainWindow):
         self.setStyleSheet(OWL_STYLE)
         self.setWindowTitle(APP_NAME)
         self.setWindowIcon(QIcon(str(ASSETS / 'prompchu-cabeca.ico')))
-        self.resize(1180, 760)
-        root = QWidget()
+        self.resize(1280, 820)
+        self.setMinimumSize(940, 640)
+        root = QWidget(); root.setObjectName('canvas')
         self.setCentralWidget(root)
         layout = QVBoxLayout(root)
-        layout.setContentsMargins(26, 22, 26, 14)
-        layout.setSpacing(18)
-        brand = QHBoxLayout()
+        layout.setContentsMargins(22, 18, 22, 10); layout.setSpacing(16)
+        header = QFrame(); header.setObjectName('header')
+        brand = QHBoxLayout(header); brand.setContentsMargins(20, 14, 20, 14)
         logo = QLabel()
-        logo.setPixmap(QPixmap(str(ASSETS / 'prompchu-corujinha.png')).scaled(64, 64, Qt.KeepAspectRatio, Qt.SmoothTransformation))
+        logo.setPixmap(QPixmap(str(ASSETS / 'prompchu-corujinha.png')).scaled(76,76,Qt.KeepAspectRatio,Qt.SmoothTransformation))
         brand.addWidget(logo)
-        heading = QLabel(tr('Prompchu · Seu banco de prompts'))
-        heading.setStyleSheet('font-size:24px; font-weight:700; color:#ffd2a1; padding:8px')
-        brand.addWidget(heading, 1)
-        layout.addLayout(brand)
-        settings = preferences()
-        controls = QHBoxLayout()
-        self.language = QComboBox()
-        for code, name in LANGUAGES.items(): self.language.addItem(name, code)
-        self.language.setCurrentIndex(max(0, self.language.findData(settings.value('language','pt'))))
-        controls.addWidget(QLabel(tr(tr('Idioma'))))
-        controls.addWidget(self.language)
-        controls.addStretch()
-        self.neon = QCheckBox(tr(tr('Neon')))
-        self.motion = QCheckBox(tr(tr('Animações')))
-        self.neon.setChecked(settings.value('neon', True, type=bool))
-        self.motion.setChecked(settings.value('motion', True, type=bool))
-        controls.addWidget(self.neon)
-        controls.addWidget(self.motion)
-        layout.addLayout(controls)
-        self.halo = glow(logo, self.neon.isChecked())
-        self.animation = QPropertyAnimation(self.halo, b'blurRadius', self)
-        self.animation.setDuration(600)
-        self.animation.setEasingCurve(QEasingCurve.OutCubic)
-        self.neon.toggled.connect(self.effects)
-        self.motion.toggled.connect(self.effects)
-        self.language.currentIndexChanged.connect(self.change_language)
-        bar = QHBoxLayout()
-        for label, callback in [(tr('Novo'), self.new), (tr('Editar'), self.edit), (tr('Duplicar'), self.duplicate), (tr('Excluir'), self.delete), (tr('Importar JSON'), self.import_json), (tr('Exportar JSON'), self.export_json), (tr('Backup do banco'), self.backup)]:
-            button = QPushButton(tr(label))
-            if callback == self.new: button.setObjectName("primary")
-            button.clicked.connect(callback)
-            bar.addWidget(button)
-        layout.addLayout(bar)
-        filters = QHBoxLayout()
-        self.search = QLineEdit()
-        self.search.setPlaceholderText(tr('Buscar por nome, texto, tags, gêneros, notas…'))
-        filters.addWidget(self.search, 3)
-        self.category = QComboBox()
-        self.genre = QComboBox()
-        self.tag = QComboBox()
-        for box in (self.category, self.genre, self.tag):
-            filters.addWidget(box, 1)
-            box.currentIndexChanged.connect(self.refresh)
-        self.favorites = QCheckBox(tr('Favoritos'))
-        filters.addWidget(self.favorites)
-        layout.addLayout(filters)
-        self.search.textChanged.connect(self.refresh)
-        self.favorites.toggled.connect(self.refresh)
-        split = QSplitter()
-        self.items = QListWidget()
-        self.items.currentItemChanged.connect(self.detail)
-        self.items.itemDoubleClicked.connect(self.edit)
-        split.addWidget(self.items)
-        panel = QWidget()
-        right = QVBoxLayout(panel)
-        self.title = QLabel(tr('Selecione um prompt ou clique em Novo'))
-        self.title.setWordWrap(True)
-        self.title.setStyleSheet('font-size:20px; font-weight:600')
-        self.meta = QLabel()
-        self.meta.setWordWrap(True)
-        right.addWidget(self.title)
-        right.addWidget(self.meta)
-        self.prompt = QPlainTextEdit()
-        self.prompt.setReadOnly(True)
-        right.addWidget(QLabel('Prompt'))
-        right.addWidget(self.prompt, 3)
-        self.extra = QPlainTextEdit()
-        self.extra.setReadOnly(True)
-        right.addWidget(QLabel(tr('Prompt negativo e notas')))
-        right.addWidget(self.extra, 1)
-        actions = QHBoxLayout()
-        for label, callback in [(tr('Copiar prompt'), self.copy), (tr('Alternar favorito'), self.favorite)]:
-            button = QPushButton(tr(label))
-            if callback == self.new: button.setObjectName("primary")
-            button.clicked.connect(callback)
-            actions.addWidget(button)
+        titles = QVBoxLayout()
+        heading = QLabel('Prompchu'); heading.setObjectName('brand')
+        subtitle = QLabel(tr('Seu próximo resultado começa com uma boa ideia.')); subtitle.setObjectName('muted')
+        titles.addWidget(heading);titles.addWidget(subtitle);brand.addLayout(titles,1)
+        self.new_button = QPushButton('+  '+tr('Novo prompt'));self.new_button.setObjectName('primary')
+        self.new_button.clicked.connect(self.new);brand.addWidget(self.new_button)
+        menu_button=QPushButton(tr('Biblioteca'))
+        menu=QMenu(menu_button)
+        for label, callback in [('Importar JSON',self.import_json),('Exportar JSON',self.export_json),('Backup do banco',self.backup)]:
+            menu.addAction(tr(label),callback)
+        menu_button.setMenu(menu);brand.addWidget(menu_button)
+        layout.addWidget(header)
+        settings=preferences()
+        controls=QHBoxLayout()
+        self.search=QLineEdit();self.search.setClearButtonEnabled(True)
+        self.search.setPlaceholderText(tr('Buscar por nome, texto, tags, gêneros, notas…')+'  ·  Ctrl+F')
+        controls.addWidget(self.search,1)
+        self.language=QComboBox()
+        for code,name in LANGUAGES.items(): self.language.addItem(name,code)
+        self.language.setCurrentIndex(max(0,self.language.findData(settings.value('language','pt'))))
+        self.language.setToolTip(tr('Idioma'));controls.addWidget(self.language)
+        self.neon=QCheckBox(tr('Neon'));self.motion=QCheckBox(tr('Animações'))
+        self.neon.setChecked(settings.value('neon',True,type=bool));self.motion.setChecked(settings.value('motion',True,type=bool))
+        controls.addWidget(self.neon);controls.addWidget(self.motion);layout.addLayout(controls)
+        split=QSplitter();split.setHandleWidth(14);self.split=split
+        library=QFrame();library.setObjectName('card')
+        left=QVBoxLayout(library);left.setContentsMargins(16,18,16,16);left.setSpacing(12)
+        self.collection=QLabel(tr('Biblioteca'));self.collection.setObjectName('section');left.addWidget(self.collection)
+        self.favorites=QCheckBox('★  '+tr('Favoritos'));left.addWidget(self.favorites)
+        self.category=QComboBox();self.genre=QComboBox();self.tag=QComboBox()
+        for box,label in [(self.category,'Categoria'),(self.genre,'Gêneros'),(self.tag,'Tags')]:
+            box.setToolTip(tr(label));left.addWidget(box);box.currentIndexChanged.connect(self.refresh)
+        clear=QPushButton(tr('Limpar filtros'));clear.clicked.connect(self.clear_filters);left.addWidget(clear)
+        self.items=QListWidget();self.items.setWordWrap(True)
+        self.items.currentItemChanged.connect(self.detail);self.items.itemDoubleClicked.connect(self.edit)
+        left.addWidget(self.items,1)
+        self.empty=QLabel(tr('Nenhum resultado. Ajuste os filtros ou crie um prompt.'))
+        self.empty.setWordWrap(True);self.empty.setObjectName('muted');left.addWidget(self.empty)
+        split.addWidget(library)
+        panel=QFrame();panel.setObjectName('card')
+        right=QVBoxLayout(panel);right.setContentsMargins(22,20,22,20);right.setSpacing(12)
+        eyebrow=QLabel(tr('ESPAÇO DE CRIAÇÃO'));eyebrow.setObjectName('section');right.addWidget(eyebrow)
+        self.title=QLabel();self.title.setObjectName('title');self.title.setWordWrap(True);right.addWidget(self.title)
+        self.meta=QLabel();self.meta.setObjectName('muted');self.meta.setWordWrap(True);right.addWidget(self.meta)
+        self.chips=QLabel();self.chips.setWordWrap(True);self.chips.setObjectName('chip');right.addWidget(self.chips)
+        self.tabs=QTabWidget()
+        self.prompt=QPlainTextEdit();self.prompt.setReadOnly(True)
+        self.negative=QPlainTextEdit();self.negative.setReadOnly(True)
+        self.notes=QPlainTextEdit();self.notes.setReadOnly(True)
+        self.extra=QPlainTextEdit();self.extra.setReadOnly(True);self.extra.hide()
+        self.tabs.addTab(self.prompt,'Prompt');self.tabs.addTab(self.negative,tr('Prompt negativo'));self.tabs.addTab(self.notes,tr('Notas'))
+        right.addWidget(self.tabs,1)
+        self.word_count=QLabel();self.word_count.setObjectName('muted');right.addWidget(self.word_count)
+        actions=QHBoxLayout();self.selection_buttons=[]
+        for label,callback,style in [('Copiar prompt',self.copy,'primary'),('Editar',self.edit,''),('Duplicar',self.duplicate,''),('Alternar favorito',self.favorite,''),('Excluir',self.delete,'danger')]:
+            button=QPushButton(tr(label));button.setObjectName(style);button.clicked.connect(callback)
+            actions.addWidget(button);self.selection_buttons.append(button)
         right.addLayout(actions)
-        split.addWidget(panel)
-        split.setSizes([360, 780])
-        layout.addWidget(split, 1)
-        self.statusBar().showMessage(str(path))
-        for shortcut, callback in [('Ctrl+N', self.new), ('Ctrl+E', self.edit), ('Ctrl+F', self.search.setFocus)]:
-            action = QAction(self)
-            action.setShortcut(QKeySequence(shortcut))
-            action.triggered.connect(callback)
-            self.addAction(action)
-        self.reload()
+        split.addWidget(panel);split.setSizes([340,880]);split.setStretchFactor(1,1)
+        layout.addWidget(split,1)
+        self.lights=Lights(self);self.lights.add(header,18);self.lights.add(self.new_button,9)
+        self.panel_light=self.lights.add(panel,16)
+        QApplication.instance().focusChanged.connect(self.focus_light)
+        self.neon.toggled.connect(self.effects);self.motion.toggled.connect(self.effects)
+        self.language.currentIndexChanged.connect(self.change_language)
+        self.search.textChanged.connect(self.refresh);self.favorites.toggled.connect(self.refresh)
+        for shortcut,callback in [('Ctrl+N',self.new),('Ctrl+E',self.edit),('Ctrl+F',self.search.setFocus),('Ctrl+Shift+C',self.copy)]:
+            action=QAction(self);action.setShortcut(QKeySequence(shortcut));action.triggered.connect(callback);self.addAction(action)
+        self.effects();self.reload()
+        geometry=settings.value('geometry')
+        if geometry is not None: self.restoreGeometry(geometry)
+        splitter_state=settings.value('splitter')
+        if splitter_state is not None: self.split.restoreState(splitter_state)
+        self.statusBar().setToolTip(str(self.database_path))
+
+    def clear_filters(self):
+        self.search.clear();self.favorites.setChecked(False)
+        for box in (self.category,self.genre,self.tag): box.setCurrentIndex(0)
+
+    def focus_light(self, old, new):
+        if hasattr(self,'panel_light'):
+            target=self.panel_light.target
+            self.panel_light.setVisible(self.neon.isChecked() and new is not None and (new is target or target.isAncestorOf(new)))
+
     def effects(self):
-        settings = preferences()
-        settings.setValue('neon', self.neon.isChecked())
-        settings.setValue('motion', self.motion.isChecked())
-        self.animation.stop()
-        self.halo.setEnabled(self.neon.isChecked())
-        self.halo.setBlurRadius(26)
-        if self.neon.isChecked(): animate(self)
+        settings=preferences()
+        settings.setValue('neon',self.neon.isChecked());settings.setValue('motion',self.motion.isChecked())
+        self.lights.configure(self.neon.isChecked(),self.motion.isChecked())
+        self.focus_light(None,QApplication.focusWidget())
 
     def change_language(self):
         preferences().setValue('language', self.language.currentData())
         replacement = Window(self.database_path)
         replacement.setGeometry(self.geometry())
+        for source,target in [(self.category,replacement.category),(self.genre,replacement.genre),(self.tag,replacement.tag)]:
+            target.setCurrentIndex(max(0,target.findData(source.currentData())))
+        replacement.search.setText(self.search.text())
+        replacement.favorites.setChecked(self.favorites.isChecked())
+        row=self.selected()
+        replacement.refresh(select=row['id'] if row else None)
+        replacement.tabs.setCurrentIndex(self.tabs.currentIndex())
+        replacement.split.restoreState(self.split.saveState())
         QApplication.instance().prompchu_window = replacement
         replacement.show()
         self.close()
@@ -273,16 +282,27 @@ class Window(QMainWindow):
         if not self.items.currentItem() and self.items.count():
             self.items.setCurrentRow(0)
         self.detail()
-        self.statusBar().showMessage(f'{self.items.count()} exibidos / {len(self.rows)} prompts • Banco: {DB_PATH}')
+        self.collection.setText(tr('Biblioteca') + f'  ·  {self.items.count()} / {len(self.rows)}')
+        self.empty.setVisible(self.items.count() == 0)
+        self.statusBar().showMessage(tr('Salvo neste computador') + '  ·  Ctrl+N / Ctrl+E / Ctrl+Shift+C')
     def detail(self, *_):
-        if hasattr(self, "animation") and self.neon.isChecked(): animate(self)
         row = self.selected()
         self.title.setText(row['name'] if row else tr('Selecione um prompt ou clique em Novo'))
         self.title.setTextFormat(Qt.PlainText)
         self.meta.setTextFormat(Qt.PlainText)
-        self.meta.setText(('Categoria: '+row['category']+' | Modelo: '+row['model']+'\nGêneros: '+row['genres']+'\nTags: '+row['tags']+'\nAtualizado: '+row['updated']) if row else '')
+        self.meta.setText((row['category'] or tr('Sem categoria')) + ('  ·  '+row['model'] if row['model'] else '') + '  ·  '+row['updated'].replace('T',' ') if row else tr('Selecione um prompt ou clique em Novo'))
+        self.chips.setTextFormat(Qt.PlainText)
+        self.chips.setText('   ·   '.join(terms(row['tags']) + terms(row['genres'])) if row else '')
+        self.chips.setVisible(bool(self.chips.text()))
         self.prompt.setPlainText(row['prompt'] if row else '')
-        self.extra.setPlainText(('NEGATIVO\n'+row['negative']+'\n\nNOTAS\n'+row['notes']) if row else '')
+        self.negative.setPlainText(row['negative'] if row else '')
+        self.notes.setPlainText(row['notes'] if row else '')
+        self.extra.setPlainText((row['negative']+'\n'+row['notes']) if row else '')
+        text=row['prompt'] if row else ''
+        self.word_count.setText(f"{len(text):,} " + tr('caracteres') + '  ·  ' + f"{len(text.split()):,} " + tr('palavras'))
+        for button in self.selection_buttons: button.setEnabled(row is not None)
+        self.selection_buttons[3].setText(('★  ' if row and row['favorite'] else '☆  ') + tr('Favorito'))
+
     def editor(self, row=None, duplicate=False):
         dialog = Editor(self, row)
         if dialog.exec() == QDialog.Accepted:
@@ -348,23 +368,17 @@ class Window(QMainWindow):
         path, _ = QFileDialog.getSaveFileName(self, 'Backup completo', 'prompts-backup.sqlite3', 'SQLite (*.sqlite3)')
         if path:
             try:
-                if Path(path).resolve() == DB_PATH.resolve(): raise ValueError('Escolha um arquivo diferente do banco em uso.')
+                if Path(path).resolve() == Path(self.database_path).resolve(): raise ValueError('Escolha um arquivo diferente do banco em uso.')
                 with sqlite3.connect(path) as target: self.store.db.backup(target)
                 QMessageBox.information(self, 'Backup concluído', 'Cópia completa do banco salva.')
             except (OSError, ValueError, sqlite3.Error) as e: QMessageBox.critical(self, 'Erro', str(e))
     def closeEvent(self, event):
+        preferences().setValue('geometry',self.saveGeometry())
+        preferences().setValue('splitter',self.split.saveState())
+        self.lights.timer.stop()
+        QApplication.instance().focusChanged.disconnect(self.focus_light)
         self.store.db.close()
         event.accept()
-
-STYLE = '''
-QWidget { background:#171c28; color:#e5ebf5; font-family:"Segoe UI"; font-size:13px; }
-QLineEdit, QPlainTextEdit, QListWidget, QComboBox {background:#202839; border:1px solid #36435b; border-radius:5px; padding:8px; selection-background-color:#365d96;}
-QPushButton {background:#2c4263; border:1px solid #45638c; border-radius:5px; padding:9px 12px;}
-QPushButton:hover {background:#3a5983;} QPushButton:pressed {background:#213550;}
-QListWidget::item {padding:12px; border-bottom:1px solid #303c51;}
-QListWidget::item:selected {background:#304d75;} QLabel {background:transparent;}
-QSplitter::handle {background:#303c51;} QStatusBar {color:#9dafca;}
-'''
 
 def data_path():
     override = os.environ.get('BANCO_PROMPTS_DIR')
@@ -382,7 +396,7 @@ if __name__ == '__main__':
     app.setWindowIcon(QIcon(str(ASSETS / 'prompchu-cabeca.ico')))
     app.setOrganizationName('Bugzinho')
     app.setStyle('Fusion')
-    app.setStyleSheet(STYLE)
+    app.setStyleSheet(OWL_STYLE)
     try:
         DB_PATH = data_path()
         window = Window(DB_PATH)
