@@ -1,3 +1,4 @@
+from contextlib import closing
 """Prompchu — seu banco de prompts local em PySide6."""
 import json
 import os
@@ -439,7 +440,7 @@ class Window(QMainWindow):
         if path:
             try:
                 if str(self.database_path)!=':memory:' and same_file(path,self.database_path): raise ValueError('Escolha um arquivo diferente do banco em uso.')
-                with sqlite3.connect(path) as target: self.store.db.backup(target)
+                with closing(sqlite3.connect(path)) as target: self.store.db.backup(target)
                 QMessageBox.information(self, 'Backup concluído', 'Cópia completa do banco salva.')
             except (OSError, ValueError, sqlite3.Error) as e: QMessageBox.critical(self, 'Erro', str(e))
     def closeEvent(self, event):

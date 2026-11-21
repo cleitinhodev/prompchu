@@ -1,4 +1,5 @@
 name: Release biblioteca beta
+# Build and test database and shelf features on all supported desktops.
 on:
   push:
     branches: [teste-biblioteca]

@@ -1,4 +1,5 @@
 import os,sys,tempfile,sqlite3,unittest
+from contextlib import closing
 from pathlib import Path
 from unittest.mock import patch
 os.environ.setdefault('QT_QPA_PLATFORM','offscreen')
@@ -18,7 +19,7 @@ class ShelfTests(unittest.TestCase):
             s=Store(a);s.add_shelf('Meus projetos')
             for name in (' ', 'meus projetos','IMAGENS','x'*81):
                 with self.assertRaises(ValueError):s.add_shelf(name)
-            with sqlite3.connect(backup) as dest:s.db.backup(dest)
+            with closing(sqlite3.connect(backup)) as dest:s.db.backup(dest)
             s.db.close();s=Store(a);self.assertIn('Meus projetos',s.shelf_names());s.db.close()
             t=Store(b);self.assertNotIn('Meus projetos',t.shelf_names());t.add_shelf('Vazia');t.db.close()
             self.assertEqual(merge_databases(a,b,out),0)
