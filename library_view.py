@@ -1,7 +1,8 @@
+import sqlite3
 """Full-window paged library. Only visible cards and thumbnails are loaded."""
 from PySide6.QtCore import Qt,Signal,QSize,QDate,QTimer,QEvent
 from PySide6.QtGui import QPixmap,QIcon,QPainter,QColor,QFont
-from PySide6.QtWidgets import (QWidget,QVBoxLayout,QHBoxLayout,QLabel,QLineEdit,QComboBox,QCheckBox,QPushButton,QListWidget,QListWidgetItem,QScrollArea,QGridLayout,QToolButton,QDateEdit)
+from PySide6.QtWidgets import (QWidget,QVBoxLayout,QHBoxLayout,QLabel,QLineEdit,QComboBox,QCheckBox,QPushButton,QListWidget,QListWidgetItem,QScrollArea,QGridLayout,QToolButton,QDateEdit,QInputDialog,QDialog,QMessageBox)
 from storage import SHELVES
 from i18n import tr
 
@@ -29,7 +30,7 @@ class LibraryView(QWidget):
         for d in (self.after,self.before):d.setCalendarPopup(True);d.setDisplayFormat('dd/MM/yyyy');d.setEnabled(False)
         dates.addWidget(self.after);dates.addWidget(QLabel('—'));dates.addWidget(self.before)
         clear=QPushButton(tr('Limpar filtros'));clear.clicked.connect(self.clear);dates.addStretch();dates.addWidget(clear);root.addLayout(dates)
-        body=QHBoxLayout();self.shelves=QListWidget();self.shelves.setFixedWidth(175);self.shelves.setSpacing(3);body.addWidget(self.shelves)
+        body=QHBoxLayout();self.shelves=QListWidget();self.shelves.setFixedWidth(175);self.shelves.setSpacing(3);sidebar=QVBoxLayout();self.create_shelf_button=QPushButton('+ '+tr('Criar prateleira'));self.create_shelf_button.setFixedWidth(175);self.create_shelf_button.clicked.connect(self.create_shelf);sidebar.addWidget(self.create_shelf_button);sidebar.addWidget(self.shelves,1);body.addLayout(sidebar)
         self.scroll=QScrollArea();self.scroll.setWidgetResizable(True);self.scroll.viewport().installEventFilter(self)
         self.canvas=QWidget();self.canvas.setObjectName("libraryCanvas");self.grid=QGridLayout(self.canvas);self.grid.setSpacing(14);self.grid.setAlignment(Qt.AlignTop|Qt.AlignLeft)
         self.scroll.setWidget(self.canvas);body.addWidget(self.scroll,1);root.addLayout(body,1)
@@ -44,6 +45,19 @@ class LibraryView(QWidget):
         self.after.dateChanged.connect(self.reset);self.before.dateChanged.connect(self.reset)
         self.prev.clicked.connect(lambda:self.turn(-1));self.next.clicked.connect(lambda:self.turn(1))
         self.refresh_options()
+    def create_shelf(self):
+        dialog=QInputDialog(self);dialog.setWindowTitle(tr('Criar prateleira'))
+        dialog.setLabelText(tr('Nome da prateleira'));dialog.setOkButtonText(tr('Salvar'));dialog.setCancelButtonText(tr('Cancelar'))
+        while dialog.exec()==QDialog.Accepted:
+            try:name=self.store.add_shelf(dialog.textValue())
+            except ValueError as error:
+                QMessageBox.warning(self,tr('Criar prateleira'),tr(str(error)));continue
+            except sqlite3.Error as error:
+                QMessageBox.critical(self,tr('Criar prateleira'),str(error));return
+            self.refresh_options()
+            for i in range(self.shelves.count()):
+                if self.shelves.item(i).data(Qt.UserRole)==name:self.shelves.setCurrentRow(i);break
+            self.reset();return
     def dates_changed(self):
         for d in (self.after,self.before):d.setEnabled(self.date_enabled.isChecked())
         self.reset()
@@ -57,7 +71,7 @@ class LibraryView(QWidget):
             box.setCurrentIndex(max(0,box.findData(value)));box.blockSignals(False)
         item=self.shelves.currentItem();old=item.data(Qt.UserRole) if item else ''
         self.shelves.blockSignals(True);self.shelves.clear()
-        for label,value in [(tr('Todas as prateleiras'),'')]+[(tr(v),v) for v in dict.fromkeys((*SHELVES,*self.store.options('shelf')))]:
+        for label,value in [(tr('Todas as prateleiras'),'')]+[(tr(v) if v in SHELVES else v,v) for v in self.store.shelf_names()]:
             item=QListWidgetItem(label);item.setData(Qt.UserRole,value);self.shelves.addItem(item)
             if value==old:self.shelves.setCurrentItem(item)
         self.shelves.blockSignals(False)

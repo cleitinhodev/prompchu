@@ -49,6 +49,7 @@ class Store:
                 self.db.execute('CREATE INDEX IF NOT EXISTS prompt_created ON prompts(created DESC,id DESC)')
                 self.db.execute('CREATE INDEX IF NOT EXISTS prompt_recent ON prompts(favorite DESC,updated DESC,id DESC)')
                 self.db.execute('CREATE INDEX IF NOT EXISTS prompt_shelf ON prompts(shelf)')
+                self.db.execute('CREATE TABLE IF NOT EXISTS shelves (name TEXT PRIMARY KEY NOT NULL)')
         except Exception:
             self.db.close()
             raise
@@ -68,11 +69,22 @@ class Store:
     def set_thumbnail(self,identifier,image):
         if image is None:self.db.execute('DELETE FROM thumbnails WHERE prompt_id=?',(identifier,))
         else:self.db.execute('INSERT OR REPLACE INTO thumbnails(prompt_id,image) VALUES (?,?)',(identifier,image))
+    def shelf_names(self):
+        return list(dict.fromkeys((*SHELVES,*self.options('shelf'))))
+    def add_shelf(self,name):
+        name=name.strip()
+        if not name:raise ValueError('Digite um nome para a prateleira.')
+        if len(name)>80:raise ValueError('Use até 80 caracteres.')
+        if any(fold(name)==fold(existing) for existing in self.shelf_names()):
+            raise ValueError('Já existe uma prateleira com esse nome.')
+        with self.db:self.db.execute('INSERT INTO shelves(name) VALUES (?)',(name,))
+        return name
     def options(self,key):
         if key not in ('tags','genres','category','shelf'):raise ValueError(key)
         options=set()
         for row in self.db.execute(f'SELECT DISTINCT {key} FROM prompts'):
             options.update(terms(row[0]) if key in ('tags','genres') else ([row[0]] if row[0] else []))
+        if key=='shelf':options.update(r[0] for r in self.db.execute('SELECT name FROM shelves'))
         return sorted(options,key=fold)
     def where(self,query='',tags='',genre='',category='',shelf='',favorite=False,after='',before='',**_):
         clauses=[];params=[]

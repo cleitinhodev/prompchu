@@ -1,14 +1,12 @@
-## Bancos independentes — 1.3.0-beta.2
+## Prateleiras personalizadas — 1.3.0-beta.3
 
-Pré-release da branch `teste-biblioteca`. A main permanece inalterada.
+Pré-release da branch `teste-biblioteca`; main preservada.
 
-- **Criar banco** e **Abrir banco**: coleções independentes, com seus próprios prompts, tags e categorias.
-- A troca salva as alterações do banco anterior e acontece na mesma janela. O nome do banco fica visível e o último arquivo aberto é lembrado.
-- **Juntar bancos** reúne dois bancos em um terceiro arquivo novo, sem modificar os originais. Preserva datas, favoritos, miniaturas e prompts repetidos.
-- **Backup do banco** mantém a cópia completa SQLite.
-- **Importar prompt / Exportar prompt**: transferência JSON; a exportação agora inclui somente o prompt selecionado, com metadados e miniatura.
-- Removido **Abrir demonstração**. Para experimentar os 54 exemplos, baixe `prompts-demo.sqlite3` e abra por **Arquivo → Abrir banco**. Alterações nele são salvas normalmente.
-- Biblioteca com cartões, prateleiras, filtros e paginação preservada.
+- Botão **Criar prateleira** no topo da lista à esquerda da Biblioteca.
+- Janela para nomear e salvar; nomes vazios, repetidos ou com mais de 80 caracteres são recusados.
+- Prateleiras ficam no banco aberto e permanecem disponíveis mesmo vazias.
+- Disponíveis no cadastro/edição e nos filtros da Biblioteca.
+- Backup e união dos bancos preservam também as prateleiras vazias.
 
 ### Downloads
 

@@ -159,7 +159,7 @@ Cada release inclui `SHA256SUMS.txt`: os hashes permitem comparar a integridade 
 
 O título usa a fonte Fredoka, distribuída com sua licença SIL Open Font License em `assets/fonts/OFL.txt` ([origem](https://github.com/google/fonts/tree/main/ofl/fredoka)). Apenas uma letra por vez apresenta falhas suaves de luminosidade, com intervalos aleatórios. O efeito pausa com a janela inativa e respeita os controles Neon e Animações.
 
-## Biblioteca beta — 1.3.0-beta.2
+## Biblioteca beta — 1.3.0-beta.3
 
 Experimento na branch `teste-biblioteca`, sem alteração da main. O menu antigo **Biblioteca** passa a se chamar **Arquivo**. O novo botão **Biblioteca** abre a grade de cartões, com miniaturas JPG/PNG locais, datas, tags, prateleiras e filtros combináveis.
 
@@ -183,3 +183,7 @@ A beta usa macOS 15 Apple Silicon na build, pois o ambiente macOS 14 do GitHub A
 - **Exportar prompt** salva apenas o selecionado em JSON. Abra outro banco e use **Importar prompt** para adicioná-lo. Importações antigas com vários registros continuam aceitas.
 
 A gravação automática após salvar uma edição, adicionar, excluir ou alterar um favorito continua ativa. A opção Abrir demonstração foi removida; os exemplos agora são um banco comum, independente.
+
+### Criar prateleiras
+
+Na Biblioteca, clique em **Criar prateleira**, acima da lista à esquerda. Digite um nome e clique em **Salvar**. Ela fica disponível no editor de prompts e nos filtros, mesmo sem prompts. Cada banco mantém suas próprias prateleiras; backup e união preservam as prateleiras vazias.

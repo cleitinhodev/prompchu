@@ -19,7 +19,7 @@ from i18n import tr, LANGUAGES
 from visual import STYLE as OWL_STYLE, preferences, Lights
 
 APP_NAME = 'Prompchu'
-VERSION = '1.3.0-beta.2'
+VERSION = '1.3.0-beta.3'
 ASSETS = Path(__file__).resolve().parent / 'assets'
 
 from storage import Store, FIELDS, SHELVES, fold, terms, validate
@@ -45,8 +45,7 @@ class Editor(QDialog):
         for key in FIELDS:
             if key == 'shelf':
                 field=QComboBox();field.setEditable(True)
-                field.addItems([tr(v) for v in SHELVES])
-                for i,v in enumerate(SHELVES):field.setItemData(i,v)
+                for v in parent.store.shelf_names():field.addItem(tr(v) if v in SHELVES else v,v)
                 value=(data or {}).get('shelf') or 'Outros'
                 index=field.findData(value)
                 if index>=0:field.setCurrentIndex(index)

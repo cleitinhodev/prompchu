@@ -19,16 +19,19 @@ def read_database(path):
     try:
         db.execute('PRAGMA query_only=ON')
         if db.execute('PRAGMA quick_check').fetchone()[0]!='ok':raise ValueError('O banco está danificado.')
-        tables={r['name']:r['type'] for r in db.execute("SELECT name,type FROM sqlite_master WHERE name IN ('prompts','thumbnails')")}
+        tables={r['name']:r['type'] for r in db.execute("SELECT name,type FROM sqlite_master WHERE name IN ('prompts','thumbnails','shelves')")}
         if tables.get('prompts')!='table':raise ValueError('Este arquivo não é um banco do Prompchu.')
         if not REQUIRED.issubset({r['name'] for r in db.execute('PRAGMA table_info(prompts)')}):raise ValueError('O banco não tem os campos necessários do Prompchu.')
-        if db.execute("SELECT 1 FROM sqlite_master WHERE type='trigger' AND tbl_name IN ('prompts','thumbnails')").fetchone():raise ValueError('Banco com gatilhos não suportados.')
+        if db.execute("SELECT 1 FROM sqlite_master WHERE type='trigger' AND tbl_name IN ('prompts','thumbnails','shelves')").fetchone():raise ValueError('Banco com gatilhos não suportados.')
         columns={r['name'] for r in db.execute('PRAGMA table_info(prompts)')}
         text_columns=(REQUIRED-{'id','favorite'})|({'shelf'} if 'shelf' in columns else set())
         invalid=' OR '.join(f"typeof({key})!='text'" for key in sorted(text_columns))
         if db.execute("SELECT 1 FROM prompts WHERE "+invalid+" OR typeof(id)!='integer' OR favorite NOT IN (0,1) OR favorite IS NULL LIMIT 1").fetchone():raise ValueError('O banco contém registros inválidos.')
         if 'thumbnails' in tables:
             if tables['thumbnails']!='table' or not {'prompt_id','image'}.issubset({r['name'] for r in db.execute('PRAGMA table_info(thumbnails)')}):raise ValueError('Tabela de miniaturas inválida.')
+        if 'shelves' in tables:
+            if tables['shelves']!='table' or 'name' not in {r['name'] for r in db.execute('PRAGMA table_info(shelves)')}:raise ValueError('Tabela de prateleiras inválida.')
+            if db.execute("SELECT 1 FROM shelves WHERE typeof(name)!='text' LIMIT 1").fetchone():raise ValueError('Prateleira inválida.')
         return db
     except Exception:
         db.close();raise
@@ -57,6 +60,9 @@ def merge_databases(first,second,destination):
         output=Store(temporary);count=0
         with output.db:
             for source in readers:
+                if source.execute("SELECT 1 FROM sqlite_master WHERE name='shelves' AND type='table'").fetchone():
+                    for shelf in source.execute('SELECT name FROM shelves'):
+                        output.db.execute('INSERT OR IGNORE INTO shelves(name) VALUES (?)',(shelf[0],))
                 has_images=source.execute("SELECT 1 FROM sqlite_master WHERE name='thumbnails' AND type='table'").fetchone()
                 for original in source.execute('SELECT * FROM prompts ORDER BY id'):
                     row=dict(original)
