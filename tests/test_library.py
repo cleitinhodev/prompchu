@@ -61,6 +61,7 @@ class LibraryTests(unittest.TestCase):
         with self.w.store.db:
             identifier=self.w.store.save(dict(name='Exportar',prompt='Conteúdo',shelf='Imagens'))
             self.w.store.set_thumbnail(identifier,data)
+        self.w.reload(identifier)
         export=Path(self.tmp.name)/'export.json'
         with patch('main.QFileDialog.getSaveFileName',return_value=(str(export),'')),patch('main.QMessageBox.information'):
             self.w.export_json()
@@ -69,13 +70,6 @@ class LibraryTests(unittest.TestCase):
         rows=self.w.store.all();self.assertEqual(len(rows),2)
         for row in rows:
             self.assertEqual(row['shelf'],'Imagens');self.assertEqual(self.w.store.thumbnail(row['id']),data)
-    def test_demo_is_separate(self):
-        self.w.open_demo();demo=self.w.demo_windows[-1]
-        try:
-            self.assertEqual(demo.store.page()[1],54)
-            self.assertEqual(self.w.store.page()[1],0)
-            self.assertNotEqual(demo.database_path,self.w.database_path)
-        finally:demo.close()
     def test_original_schema_migration(self):
         path=Path(self.tmp.name)/'old.sqlite3';db=sqlite3.connect(path)
         db.execute('CREATE TABLE prompts (id INTEGER PRIMARY KEY,name TEXT,tags TEXT,genres TEXT,category TEXT,model TEXT,prompt TEXT,negative TEXT,notes TEXT,favorite INTEGER,created TEXT,updated TEXT)')

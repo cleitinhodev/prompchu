@@ -84,9 +84,9 @@ No Windows, a localização usual é `%APPDATA%\Bugzinho\BancoDePrompts\prompts.
 - Atualizar o código ou a build não exige apagar esse arquivo.
 - Os dados **não são criptografados**.
 - Use **Backup do banco** e guarde uma cópia em outro dispositivo.
-- Para restaurar SQLite, feche o aplicativo e substitua o banco pela cópia de backup.
+- Para abrir uma cópia de backup, use **Arquivo → Abrir banco**.
 - Para levar registros a outro PC, exporte JSON e importe no destino.
-- A exportação inclui **todos** os prompts, mesmo com filtros ativos.
+- **Exportar prompt** inclui somente o prompt selecionado, com seus metadados e miniatura.
 - Importar adiciona registros e mantém os existentes; repetir a importação cria cópias.
 - `BANCO_PROMPTS_DIR` permite escolher outra pasta de dados com permissão de escrita.
 
@@ -141,7 +141,7 @@ Owl Studio agora é a versão principal na `main`. A branch `testes/owl-neon` fi
 - Leitura com abas separadas para prompt, negativo e notas; contagem de caracteres e palavras.
 - Ações indisponíveis ficam desativadas quando não há seleção; textos do usuário são exibidos literalmente.
 - Editor com rolagem para manter Salvar e Cancelar acessíveis em telas menores.
-- Menu Biblioteca reúne importação, exportação e backup.
+- Menu Arquivo reúne as operações de bancos e transferência de prompts.
 - Neon desenhado nas bordas com relógio compartilhado a aproximadamente 30 fps. Pausa quando a janela está escondida, minimizada ou sem foco.
 - Neon e animações independentes: desligar movimento mantém um contorno estático; desligar neon remove os efeitos.
 - Preferências, tamanho da janela e divisão dos painéis persistentes. A troca de idioma preserva busca, filtros, seleção e aba.
@@ -153,13 +153,13 @@ Validação: testes de persistência, validação e rollback; testes de filtros,
 
 ## Releases Windows, Linux e macOS
 
-Baixe os pacotes em [Releases](https://github.com/cleitinhodev/prompchu/releases). Consulte as instruções e os requisitos de cada sistema nas notas do release. O workflow `Release desktop` compila nativamente em Windows, Ubuntu 22.04 e macOS 14 (Apple Silicon), testa cada pacote e só publica quando os três terminam com sucesso. Atualizar `VERSION` na `main` inicia uma nova publicação.
+Baixe os pacotes em [Releases](https://github.com/cleitinhodev/prompchu/releases). Consulte as instruções e os requisitos de cada sistema nas notas do release. O workflow `Release desktop` compila nativamente em Windows, Ubuntu 22.04 e macOS 15 (Apple Silicon), testa cada pacote e só publica quando os três terminam com sucesso. Atualizar `VERSION` na `main` inicia uma nova publicação.
 
 Cada release inclui `SHA256SUMS.txt`: os hashes permitem comparar a integridade dos arquivos baixados com os publicados. Eles não substituem assinatura de autor; esta versão não tem certificado Authenticode nem notarização Apple.
 
 O título usa a fonte Fredoka, distribuída com sua licença SIL Open Font License em `assets/fonts/OFL.txt` ([origem](https://github.com/google/fonts/tree/main/ofl/fredoka)). Apenas uma letra por vez apresenta falhas suaves de luminosidade, com intervalos aleatórios. O efeito pausa com a janela inativa e respeita os controles Neon e Animações.
 
-## Biblioteca beta — 1.3.0-beta.1
+## Biblioteca beta — 1.3.0-beta.2
 
 Experimento na branch `teste-biblioteca`, sem alteração da main. O menu antigo **Biblioteca** passa a se chamar **Arquivo**. O novo botão **Biblioteca** abre a grade de cartões, com miniaturas JPG/PNG locais, datas, tags, prateleiras e filtros combináveis.
 
@@ -167,8 +167,19 @@ A tela inicial carrega até 100 resumos por página e a biblioteca até 24 cart�
 
 Use **Novo/Editar → Prateleira** para classificar e **Escolher miniatura** para adicionar uma imagem. Limites: 20 MB e 40 megapixels por imagem, reduzida para até 640 × 400 e salva dentro do banco. **Remover miniatura** volta ao cartão padrão. A migração reconhece categorias comuns dos registros antigos; registros sem prateleira aparecem em Outros.
 
-Use **Arquivo → Abrir demonstração** para testar 54 exemplos em uma janela e banco temporários separados. `assets/demo-prompts.json` é importável e `scripts/make_examples.py` gera `examples/prompts-demo.sqlite3`, sem tocar no banco do usuário. Ambos são anexados ao pré-release. Os exemplos não são adicionados automaticamente à coleção pessoal.
+Baixe `prompts-demo.sqlite3` no release e use **Arquivo → Abrir banco** para testar 54 exemplos na mesma janela. As alterações nesse arquivo são permanentes, como em qualquer banco. `assets/demo-prompts.json` é importável e `scripts/make_examples.py` gera `examples/prompts-demo.sqlite3`, sem tocar no banco do usuário. Ambos são anexados ao pré-release. Os exemplos não são adicionados automaticamente à coleção pessoal.
 
 **Backup do banco** inclui miniaturas. JSON v2 inclui prateleiras e imagens; a beta aceita v1/v2, mas a versão estável 1.2.0 não importa v2. Faça backup antes de experimentar com seus dados.
 
 A beta usa macOS 15 Apple Silicon na build, pois o ambiente macOS 14 do GitHub Actions foi aposentado.
+
+## Bancos independentes
+
+- **Arquivo → Criar banco** cria uma coleção vazia em um arquivo novo.
+- **Abrir banco** troca a coleção na mesma janela, confirmando as gravações do banco anterior. Tags, gêneros e categorias vêm do banco aberto; os filtros da tela são limpos na troca.
+- O nome do banco aparece abaixo do cabeçalho; passe o mouse para ver o caminho completo. O último banco aberto é lembrado na próxima execução.
+- **Backup do banco** copia a coleção completa, incluindo miniaturas.
+- **Juntar bancos** permite selecionar dois arquivos e salvar um terceiro. Nenhum original é apagado ou substituído; datas, favoritos e miniaturas são preservados. Prompts repetidos também são mantidos. O resultado abre automaticamente.
+- **Exportar prompt** salva apenas o selecionado em JSON. Abra outro banco e use **Importar prompt** para adicioná-lo. Importações antigas com vários registros continuam aceitas.
+
+A gravação automática após salvar uma edição, adicionar, excluir ou alterar um favorito continua ativa. A opção Abrir demonstração foi removida; os exemplos agora são um banco comum, independente.

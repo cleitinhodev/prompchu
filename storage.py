@@ -29,25 +29,29 @@ def validate(data):
 class Store:
     def __init__(self,path):
         self.db=sqlite3.connect(path)
-        self.db.row_factory=sqlite3.Row
-        self.db.create_function('fold',1,fold,deterministic=True)
-        self.db.create_function('has_term',2,lambda text,term:int(fold(term) in {fold(t) for t in terms(text)}),deterministic=True)
-        self.db.execute('PRAGMA foreign_keys=ON')
-        with self.db:
-            self.db.execute('''CREATE TABLE IF NOT EXISTS prompts (
-                id INTEGER PRIMARY KEY, name TEXT NOT NULL, tags TEXT NOT NULL,
-                genres TEXT NOT NULL, category TEXT NOT NULL, model TEXT NOT NULL,
-                prompt TEXT NOT NULL, negative TEXT NOT NULL, notes TEXT NOT NULL,
-                favorite INTEGER NOT NULL DEFAULT 0, created TEXT NOT NULL, updated TEXT NOT NULL)''')
-            cols={r['name'] for r in self.db.execute('PRAGMA table_info(prompts)')}
-            if 'shelf' not in cols:
-                self.db.execute("ALTER TABLE prompts ADD COLUMN shelf TEXT NOT NULL DEFAULT ''")
-                for shelf,names in {'Imagens':['imagem','imagens','image'],'Vídeos':['video','videos'],'Músicas':['musica','musicas','audio'],'Documentos':['documento','documentos'],'Programação':['codigo','programacao','code'],'Escrita':['texto','escrita'],'Estudos':['estudos','educacao'],'Marketing':['marketing']}.items():
-                    for name in names:self.db.execute('UPDATE prompts SET shelf=? WHERE fold(category)=?',(shelf,name))
-            self.db.execute('CREATE TABLE IF NOT EXISTS thumbnails (prompt_id INTEGER PRIMARY KEY REFERENCES prompts(id) ON DELETE CASCADE, image BLOB NOT NULL)')
-            self.db.execute('CREATE INDEX IF NOT EXISTS prompt_created ON prompts(created DESC,id DESC)')
-            self.db.execute('CREATE INDEX IF NOT EXISTS prompt_recent ON prompts(favorite DESC,updated DESC,id DESC)')
-            self.db.execute('CREATE INDEX IF NOT EXISTS prompt_shelf ON prompts(shelf)')
+        try:
+            self.db.row_factory=sqlite3.Row
+            self.db.create_function('fold',1,fold,deterministic=True)
+            self.db.create_function('has_term',2,lambda text,term:int(fold(term) in {fold(t) for t in terms(text)}),deterministic=True)
+            self.db.execute('PRAGMA foreign_keys=ON')
+            with self.db:
+                self.db.execute('''CREATE TABLE IF NOT EXISTS prompts (
+                    id INTEGER PRIMARY KEY, name TEXT NOT NULL, tags TEXT NOT NULL,
+                    genres TEXT NOT NULL, category TEXT NOT NULL, model TEXT NOT NULL,
+                    prompt TEXT NOT NULL, negative TEXT NOT NULL, notes TEXT NOT NULL,
+                    favorite INTEGER NOT NULL DEFAULT 0, created TEXT NOT NULL, updated TEXT NOT NULL)''')
+                cols={r['name'] for r in self.db.execute('PRAGMA table_info(prompts)')}
+                if 'shelf' not in cols:
+                    self.db.execute("ALTER TABLE prompts ADD COLUMN shelf TEXT NOT NULL DEFAULT ''")
+                    for shelf,names in {'Imagens':['imagem','imagens','image'],'Vídeos':['video','videos'],'Músicas':['musica','musicas','audio'],'Documentos':['documento','documentos'],'Programação':['codigo','programacao','code'],'Escrita':['texto','escrita'],'Estudos':['estudos','educacao'],'Marketing':['marketing']}.items():
+                        for name in names:self.db.execute('UPDATE prompts SET shelf=? WHERE fold(category)=?',(shelf,name))
+                self.db.execute('CREATE TABLE IF NOT EXISTS thumbnails (prompt_id INTEGER PRIMARY KEY REFERENCES prompts(id) ON DELETE CASCADE, image BLOB NOT NULL)')
+                self.db.execute('CREATE INDEX IF NOT EXISTS prompt_created ON prompts(created DESC,id DESC)')
+                self.db.execute('CREATE INDEX IF NOT EXISTS prompt_recent ON prompts(favorite DESC,updated DESC,id DESC)')
+                self.db.execute('CREATE INDEX IF NOT EXISTS prompt_shelf ON prompts(shelf)')
+        except Exception:
+            self.db.close()
+            raise
     def all(self):
         return [dict(r) for r in self.db.execute('SELECT * FROM prompts ORDER BY favorite DESC,updated DESC,id DESC')]
     def get(self,identifier):

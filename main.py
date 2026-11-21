@@ -6,7 +6,7 @@ import sys
 import unicodedata
 from pathlib import Path
 from datetime import datetime
-from PySide6.QtCore import Qt, QStandardPaths
+from PySide6.QtCore import Qt, QStandardPaths, QSignalBlocker
 from PySide6.QtGui import QAction, QKeySequence, QIcon, QPixmap
 from PySide6.QtWidgets import (QApplication, QMainWindow, QWidget, QVBoxLayout,
     QHBoxLayout, QFormLayout, QLineEdit, QPlainTextEdit, QComboBox, QCheckBox,
@@ -19,12 +19,13 @@ from i18n import tr, LANGUAGES
 from visual import STYLE as OWL_STYLE, preferences, Lights
 
 APP_NAME = 'Prompchu'
-VERSION = '1.3.0-beta.1'
+VERSION = '1.3.0-beta.2'
 ASSETS = Path(__file__).resolve().parent / 'assets'
 
 from storage import Store, FIELDS, SHELVES, fold, terms, validate
 from thumbnails import load_thumbnail, normalize_image
 from library_view import LibraryView
+from databases import create_database, open_database, merge_databases, same_file
 import base64
 
 class Editor(QDialog):
@@ -104,7 +105,7 @@ class Editor(QDialog):
 class Window(QMainWindow):
     def __init__(self, path):
         super().__init__()
-        self.store = Store(path)
+        self.store = open_database(path) if str(path) != ':memory:' and Path(path).exists() else Store(path)
         self.database_path = path
         self.offset=0
         self.page_size=100
@@ -130,12 +131,15 @@ class Window(QMainWindow):
         self.new_button.clicked.connect(self.new);brand.addWidget(self.new_button)
         menu_button=QPushButton(tr('Arquivo'))
         menu=QMenu(menu_button)
-        for label, callback in [('Importar JSON',self.import_json),('Exportar JSON',self.export_json),('Backup do banco',self.backup),('Abrir demonstração',self.open_demo)]:
-            menu.addAction(tr(label),callback)
+        for label, callback in [('Criar banco',self.new_database),('Abrir banco',self.choose_database),('Backup do banco',self.backup),('Juntar bancos',self.join_databases),('Importar prompt',self.import_json),('Exportar prompt',self.export_json)]:
+            action=menu.addAction(tr(label),callback)
+            if callback==self.export_json:self.export_action=action
         menu_button.setMenu(menu);brand.addWidget(menu_button)
         self.library_button=QPushButton(tr('Biblioteca'));self.library_button.clicked.connect(self.show_library);brand.addWidget(self.library_button)
         about_button=QPushButton(tr('Sobre'));about_button.clicked.connect(self.show_about);brand.addWidget(about_button)
         layout.addWidget(header)
+        self.bank_label=QLabel();self.bank_label.setObjectName('muted');self.bank_label.setTextFormat(Qt.PlainText)
+        layout.addWidget(self.bank_label)
         settings=preferences()
         self.pages=QStackedWidget();layout.addWidget(self.pages,1)
         self.home=QWidget();self.pages.addWidget(self.home)
@@ -206,7 +210,7 @@ class Window(QMainWindow):
         if geometry is not None: self.restoreGeometry(geometry)
         splitter_state=settings.value('splitter')
         if splitter_state is not None: self.split.restoreState(splitter_state)
-        self.statusBar().setToolTip(str(self.database_path))
+        self.update_database_label()
 
     def focus_search(self):
         (self.library.query if self.pages.currentWidget() is self.library else self.search).setFocus()
@@ -217,19 +221,60 @@ class Window(QMainWindow):
         self.pages.setCurrentWidget(self.home);self.tabs.setCurrentIndex(0)
     def turn_page(self,direction):
         self.offset+=direction*self.page_size;self.refresh(keep_page=True)
-    def open_demo(self):
-        import tempfile
-        folder=tempfile.TemporaryDirectory(prefix='prompchu-demo-')
-        window=Window(Path(folder.name)/'demo.sqlite3');window.demo_folder=folder
-        rows=json.loads((ASSETS/'demo-prompts.json').read_text(encoding='utf-8'))['prompts']
-        with window.store.db:
-            for row in rows:
-                identifier=window.store.save(row)
-                window.store.db.execute('UPDATE prompts SET created=?,updated=? WHERE id=?',(row['created'],row['updated'],identifier))
-        window.setWindowTitle(APP_NAME+' · '+tr('Demonstração'))
-        window.reload();window.show_library();window.show()
-        if not hasattr(self,'demo_windows'):self.demo_windows=[]
-        self.demo_windows.append(window)
+    def update_database_label(self):
+        name=Path(self.database_path).name
+        self.bank_label.setText(tr('Banco aberto')+': '+name)
+        self.bank_label.setToolTip(str(self.database_path))
+        self.statusBar().setToolTip(str(self.database_path))
+    def switch_database(self,path,create=False):
+        if not create and str(self.database_path) != ':memory:' and same_file(path,self.database_path):return
+        self.store.db.commit()
+        candidate=create_database(path) if create else open_database(path)
+        old=self.store
+        self.library.timer.stop()
+        controls=[self.search,self.category,self.genre,self.tag,self.favorites,self.items,
+                  self.library.query,self.library.tags,self.library.category,self.library.genre,
+                  self.library.shelves,self.library.favorites,self.library.sort,self.library.date_enabled]
+        blockers=[QSignalBlocker(w) for w in controls]
+        try:
+            self.items.clear();self.search.clear();self.favorites.setChecked(False)
+            for box in (self.category,self.genre,self.tag):box.clear()
+            self.library.query.clear();self.library.tags.clear();self.library.shelves.clear()
+            self.library.category.clear();self.library.genre.clear();self.library.favorites.setChecked(False)
+            self.library.date_enabled.setChecked(False);self.library.sort.setCurrentIndex(0)
+            self.library.after.setEnabled(False);self.library.before.setEnabled(False)
+            self.store=candidate;self.library.store=candidate;self.database_path=Path(path).resolve()
+            self.offset=0;self.library.offset=0
+            self.reload();self.library.refresh()
+            self.pages.setCurrentWidget(self.home);self.tabs.setCurrentIndex(0)
+            self.update_database_label()
+        finally:
+            for blocker in blockers:blocker.unblock()
+        old.db.close()
+        preferences().setValue('last_database',str(self.database_path))
+    def new_database(self):
+        path,_=QFileDialog.getSaveFileName(self,tr('Criar banco'),'prompts-novo.sqlite3','SQLite (*.sqlite3 *.db)')
+        if path:
+            try:self.switch_database(path,create=True)
+            except (OSError,ValueError,sqlite3.Error) as e:QMessageBox.critical(self,tr('Criar banco'),str(e))
+    def choose_database(self):
+        path,_=QFileDialog.getOpenFileName(self,tr('Abrir banco'),'','SQLite (*.sqlite3 *.db);;Todos (*)')
+        if path:
+            try:self.switch_database(path)
+            except (OSError,ValueError,sqlite3.Error) as e:QMessageBox.critical(self,tr('Abrir banco'),str(e))
+    def join_databases(self):
+        paths,_=QFileDialog.getOpenFileNames(self,tr('Selecione dois bancos'),'','SQLite (*.sqlite3 *.db);;Todos (*)')
+        if not paths:return
+        if len(paths)!=2:
+            QMessageBox.warning(self,tr('Juntar bancos'),tr('Selecione exatamente dois bancos.'));return
+        destination,_=QFileDialog.getSaveFileName(self,tr('Salvar banco unido'),'prompts-unidos.sqlite3','SQLite (*.sqlite3 *.db)')
+        if not destination:return
+        try:
+            self.store.db.commit()
+            count=merge_databases(paths[0],paths[1],destination)
+            QMessageBox.information(self,tr('Juntar bancos'),tr('Banco unido criado. Os originais foram preservados.')+f' ({count} prompts)')
+            self.switch_database(destination)
+        except (OSError,ValueError,sqlite3.Error) as e:QMessageBox.critical(self,tr('Juntar bancos'),str(e))
     def show_about(self):
         AboutDialog(self, VERSION).exec()
 
@@ -252,9 +297,6 @@ class Window(QMainWindow):
     def change_language(self):
         preferences().setValue('language', self.language.currentData())
         replacement = Window(self.database_path)
-        if hasattr(self,'demo_folder'):
-            replacement.demo_folder=self.demo_folder
-            replacement.setWindowTitle(self.windowTitle())
         replacement.setGeometry(self.geometry())
         for source,target in [(self.category,replacement.category),(self.genre,replacement.genre),(self.tag,replacement.tag)]:
             target.setCurrentIndex(max(0,target.findData(source.currentData())))
@@ -314,6 +356,7 @@ class Window(QMainWindow):
         text=row['prompt'] if row else ''
         self.word_count.setText(f"{len(text):,} " + tr('caracteres') + '  ·  ' + f"{len(text.split()):,} " + tr('palavras'))
         for button in self.selection_buttons: button.setEnabled(row is not None)
+        self.export_action.setEnabled(row is not None)
         self.selection_buttons[3].setText(('★  ' if row and row['favorite'] else '☆  ') + tr('Favorito'))
 
     def editor(self, row=None, duplicate=False):
@@ -352,18 +395,20 @@ class Window(QMainWindow):
             QApplication.clipboard().setText(self.selected()['prompt'])
             self.statusBar().showMessage(tr('Prompt copiado!'), 3000)
     def export_json(self):
-        path, _ = QFileDialog.getSaveFileName(self, 'Exportar todos os prompts', 'prompts.json', 'JSON (*.json)')
+        row=self.selected()
+        if not row:return
+        path,_=QFileDialog.getSaveFileName(self,tr('Exportar prompt'),'prompt.json','JSON (*.json)')
         if path:
             try:
-                rows = [{k: bool(r[k]) if k == 'favorite' else r[k] for k in FIELDS} for r in self.store.all()]
-                for data,row in zip(rows,self.store.all()):
-                    image=self.store.thumbnail(row['id'])
-                    if image:data['thumbnail_png']=base64.b64encode(image).decode('ascii')
-                Path(path).write_text(json.dumps({'format':'banco-de-prompts', 'version':2, 'prompts':rows}, ensure_ascii=False, indent=2), encoding='utf-8')
-                QMessageBox.information(self, 'Exportado', f'{len(rows)} prompts exportados.')
-            except OSError as e: QMessageBox.critical(self, 'Erro', str(e))
+                if str(self.database_path)!=':memory:' and same_file(path,self.database_path):raise ValueError('Escolha um arquivo diferente do banco em uso.')
+                data={k:bool(row[k]) if k=='favorite' else row[k] for k in FIELDS}
+                image=self.store.thumbnail(row['id'])
+                if image:data['thumbnail_png']=base64.b64encode(image).decode('ascii')
+                Path(path).write_text(json.dumps({'format':'banco-de-prompts','version':2,'prompts':[data]},ensure_ascii=False,indent=2),encoding='utf-8')
+                QMessageBox.information(self,tr('Exportar prompt'),tr('Prompt exportado.'))
+            except (OSError,ValueError) as e:QMessageBox.critical(self,tr('Exportar prompt'),str(e))
     def import_json(self):
-        path, _ = QFileDialog.getOpenFileName(self, 'Importar prompts', '', 'JSON (*.json)')
+        path, _ = QFileDialog.getOpenFileName(self, tr('Importar prompt'), '', 'JSON (*.json)')
         if not path: return
         try:
             if Path(path).stat().st_size > 25*1024*1024:
@@ -386,6 +431,7 @@ class Window(QMainWindow):
                     identifier=self.store.save(row)
                     self.store.set_thumbnail(identifier,image)
             self.reload()
+            if rows:self.open_prompt(identifier)
             QMessageBox.information(self, 'Importado', f'{len(rows)} prompts adicionados.')
         except (OSError, ValueError, sqlite3.Error) as e:
             QMessageBox.critical(self, 'Importação cancelada', str(e))
@@ -393,7 +439,7 @@ class Window(QMainWindow):
         path, _ = QFileDialog.getSaveFileName(self, 'Backup completo', 'prompts-backup.sqlite3', 'SQLite (*.sqlite3)')
         if path:
             try:
-                if Path(path).resolve() == Path(self.database_path).resolve(): raise ValueError('Escolha um arquivo diferente do banco em uso.')
+                if str(self.database_path)!=':memory:' and same_file(path,self.database_path): raise ValueError('Escolha um arquivo diferente do banco em uso.')
                 with sqlite3.connect(path) as target: self.store.db.backup(target)
                 QMessageBox.information(self, 'Backup concluído', 'Cópia completa do banco salva.')
             except (OSError, ValueError, sqlite3.Error) as e: QMessageBox.critical(self, 'Erro', str(e))
@@ -431,12 +477,16 @@ if __name__ == '__main__':
             smoke_folder = tempfile.TemporaryDirectory()
             DB_PATH = Path(smoke_folder.name) / 'smoke.sqlite3'
         else:
-            DB_PATH = data_path()
+            remembered=preferences().value('last_database','')
+            missing=bool(remembered and not Path(remembered).is_file())
+            DB_PATH=Path(remembered) if remembered and not missing and not os.environ.get('BANCO_PROMPTS_DIR') else data_path()
         window = Window(DB_PATH)
         window.show()
+        if '--smoke-test' not in sys.argv and missing:
+            QMessageBox.warning(window,tr('Abrir banco'),tr('O último banco não foi encontrado. O banco padrão foi aberto.'))
         if '--smoke-test' in sys.argv:
             QTimer.singleShot(500, window.close)
         sys.exit(app.exec())
-    except (OSError, sqlite3.Error) as error:
+    except (OSError, ValueError, sqlite3.Error) as error:
         QMessageBox.critical(None, 'Não foi possível abrir o banco', str(error))
         sys.exit(1)
