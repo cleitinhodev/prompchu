@@ -20,7 +20,7 @@ from i18n import tr, LANGUAGES
 from visual import STYLE as OWL_STYLE, preferences, Lights
 
 APP_NAME = 'Prompchu'
-VERSION = '1.3.0-beta.3'
+VERSION = '1.3.0'
 ASSETS = Path(__file__).resolve().parent / 'assets'
 
 from storage import Store, FIELDS, SHELVES, fold, terms, validate

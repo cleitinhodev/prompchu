@@ -1,25 +1,35 @@
-## Prateleiras personalizadas — 1.3.0-beta.3
+# Prompchu 1.3.0 — Estável
 
-Pré-release da branch `teste-biblioteca`; main preservada.
+A versão aprovada da Biblioteca e dos bancos independentes agora é a principal. A main anterior (1.2.0) foi preservada na branch `legado`. As versões beta anteriores permanecem no histórico.
 
-- Botão **Criar prateleira** no topo da lista à esquerda da Biblioteca.
-- Janela para nomear e salvar; nomes vazios, repetidos ou com mais de 80 caracteres são recusados.
-- Prateleiras ficam no banco aberto e permanecem disponíveis mesmo vazias.
-- Disponíveis no cadastro/edição e nos filtros da Biblioteca.
-- Backup e união dos bancos preservam também as prateleiras vazias.
+## Novidades
 
-### Downloads
+- Biblioteca em cartões, miniaturas JPG/PNG, datas, tags e filtros combináveis.
+- Prateleiras padrão e criação de prateleiras personalizadas, persistentes mesmo vazias.
+- Criar e abrir bancos independentes na mesma janela, lembrando o último banco utilizado.
+- União de dois bancos em um terceiro, sem apagar os originais; preserva datas, miniaturas e prateleiras vazias.
+- Exportação de um prompt selecionado em JSON e importação no banco escolhido.
+- Backup completo SQLite e gravação após salvar cada alteração.
+- Dez idiomas, neon e animações opcionais, identidade da corujinha e janela Sobre.
 
-- Windows 10/11 AMD64: extraia o ZIP inteiro e abra `Prompchu/Prompchu.exe`.
-- Linux x86_64: extraia o tar.gz e execute `./Prompchu/Prompchu`. Compilado no Ubuntu 22.04, requer ambiente gráfico e bibliotecas Qt/X11/OpenGL de sistema. Não é AppImage.
-- macOS Apple Silicon: extraia e abra `Prompchu.app`; alvo macOS 15+. Não é para Intel.
+## Bancos úteis — download opcional
 
-Python já está incluído. Builds sem certificado Authenticode ou notarização Apple.
+`Prompchu-Bancos-Uteis-1.3.0.zip` contém uma pasta com **9 bancos e 540 modelos de prompts em português**. Áreas: Imagens, Vídeos, Documentos, Programação, Músicas, Estudos, Marketing, Escrita e Produtividade.
 
-### Dados e compatibilidade
+Cada área inclui 20 tarefas com versões para **Criar, Revisar e Adaptar** (60 registros por banco). Os campos entre colchetes permitem reutilizar os textos. O pacote traz instruções e catálogo. Não contém miniaturas.
 
-Faça **Arquivo → Backup do banco** antes de testar com sua coleção. O esquema recebe uma coluna de prateleira e uma tabela de miniaturas, sem apagar os prompts existentes. O backup SQLite inclui as imagens. O programa continua local, sem envio dos prompts ou miniaturas à internet.
+Extraia o ZIP e use **Arquivo → Abrir banco**. Os exemplos não são instalados, abertos ou importados automaticamente. O programa não executa prompts: copie o texto para a ferramenta desejada. Revise o resultado gerado.
 
-A importação aceita JSON v1 e v2. As novas exportações usam v2 e incluem prateleira e miniatura; o Prompchu 1.2.0 não importa esse formato novo. A data de adição em importações corresponde à data da importação. O banco demo conserva as datas fictícias dos exemplos.
+## Downloads do aplicativo
 
-`SHA256SUMS.txt` permite comparar a integridade de cada download; não é assinatura digital de autoria. Todos os pacotes passam por testes automatizados e abertura offscreen. A validação manual nos desktops ainda é importante nesta beta.
+- **Windows 10/11 AMD64:** extraia o ZIP inteiro e execute `Prompchu/Prompchu.exe`, mantendo todos os arquivos juntos.
+- **Linux x86_64:** extraia o tar.gz e execute `./Prompchu/Prompchu`. Build Ubuntu 22.04; requer ambiente gráfico e bibliotecas Qt/X11/OpenGL. Não é AppImage.
+- **macOS Apple Silicon:** extraia e abra `Prompchu.app`. Alvo macOS 15+; não é build Intel.
+
+Python incluído. Sem certificado Authenticode ou notarização Apple. `SHA256SUMS.txt` permite verificar integridade dos downloads; não é assinatura digital de autoria.
+
+## Dados e compatibilidade
+
+Faça backup antes de atualizar seu banco. A migração adiciona prateleiras e miniaturas sem apagar prompts. Os dados continuam locais, sem envio automático à internet. JSON v1 e v2 são aceitos; a exportação usa v2, que não é importado pela versão 1.2.0. A importação cria novas datas de adição; a união dos bancos preserva as datas originais.
+
+A interface e os pacotes passam por testes automatizados em Windows, Linux e macOS. A promoção para estável incorpora a versão testada e aprovada pelo usuário.
