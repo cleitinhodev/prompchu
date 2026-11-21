@@ -158,3 +158,15 @@ Baixe os pacotes em [Releases](https://github.com/cleitinhodev/prompchu/releases
 Cada release inclui `SHA256SUMS.txt`: os hashes permitem comparar a integridade dos arquivos baixados com os publicados. Eles não substituem assinatura de autor; esta versão não tem certificado Authenticode nem notarização Apple.
 
 O título usa a fonte Fredoka, distribuída com sua licença SIL Open Font License em `assets/fonts/OFL.txt` ([origem](https://github.com/google/fonts/tree/main/ofl/fredoka)). Apenas uma letra por vez apresenta falhas suaves de luminosidade, com intervalos aleatórios. O efeito pausa com a janela inativa e respeita os controles Neon e Animações.
+
+## Biblioteca beta — 1.3.0-beta.1
+
+Experimento na branch `teste-biblioteca`, sem alteração da main. O menu antigo **Biblioteca** passa a se chamar **Arquivo**. O novo botão **Biblioteca** abre a grade de cartões, com miniaturas JPG/PNG locais, datas, tags, prateleiras e filtros combináveis.
+
+A tela inicial carrega até 100 resumos por página e a biblioteca até 24 cartões. Busca e filtros operam no SQLite sobre a coleção inteira. Apenas o texto selecionado é carregado integralmente; a busca por conteúdo ainda precisa examinar textos no SQLite e não promete tempo constante para coleções enormes.
+
+Use **Novo/Editar → Prateleira** para classificar e **Escolher miniatura** para adicionar uma imagem. Limites: 20 MB e 40 megapixels por imagem, reduzida para até 640 × 400 e salva dentro do banco. **Remover miniatura** volta ao cartão padrão. A migração reconhece categorias comuns dos registros antigos; registros sem prateleira aparecem em Outros.
+
+Use **Arquivo → Abrir demonstração** para testar 54 exemplos em uma janela e banco temporários separados. `assets/demo-prompts.json` é importável e `scripts/make_examples.py` gera `examples/prompts-demo.sqlite3`, sem tocar no banco do usuário. Ambos são anexados ao pré-release. Os exemplos não são adicionados automaticamente à coleção pessoal.
+
+**Backup do banco** inclui miniaturas. JSON v2 inclui prateleiras e imagens; a beta aceita v1/v2, mas a versão estável 1.2.0 não importa v2. Faça backup antes de experimentar com seus dados.

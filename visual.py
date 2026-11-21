@@ -120,3 +120,11 @@ class Lights(QObject):
         self.seconds += min(self.elapsed.restart()/1000,.1)
         for layer in self.layers:
             if layer.isVisible(): layer.update()
+
+STYLE += '''
+QWidget#libraryCanvas {background:#171321;}
+QToolButton#libraryCard {background:#251d33;border:1px solid #4b365e;border-radius:14px;padding:10px;color:#eaddf5;font-size:13px;}
+QToolButton#libraryCard:hover {background:#3a294c;border-color:#efbc9e;}
+QToolButton#libraryCard:focus {border:2px solid #efbc9e;}
+QDateEdit {background:#211a30;border:1px solid #4b365e;border-radius:8px;padding:6px;color:#eaddf5;}
+'''

@@ -11,7 +11,7 @@ from PySide6.QtGui import QAction, QKeySequence, QIcon, QPixmap
 from PySide6.QtWidgets import (QApplication, QMainWindow, QWidget, QVBoxLayout,
     QHBoxLayout, QFormLayout, QLineEdit, QPlainTextEdit, QComboBox, QCheckBox,
     QPushButton, QListWidget, QListWidgetItem, QSplitter, QLabel, QMessageBox,
-    QFileDialog, QDialog, QDialogButtonBox, QFrame, QTabWidget, QMenu, QScrollArea)
+    QFileDialog, QDialog, QDialogButtonBox, QFrame, QTabWidget, QMenu, QScrollArea, QStackedWidget)
 
 from about import AboutDialog
 from wordmark import Wordmark
@@ -19,57 +19,13 @@ from i18n import tr, LANGUAGES
 from visual import STYLE as OWL_STYLE, preferences, Lights
 
 APP_NAME = 'Prompchu'
-VERSION = '1.2.0'
+VERSION = '1.3.0-beta.1'
 ASSETS = Path(__file__).resolve().parent / 'assets'
 
-FIELDS = ('name', 'tags', 'genres', 'category', 'model', 'prompt', 'negative', 'notes', 'favorite')
-
-def fold(text):
-    return ''.join(c for c in unicodedata.normalize('NFD', text.casefold()) if unicodedata.category(c) != 'Mn')
-
-def terms(text):
-    return list(dict.fromkeys(t.strip() for t in text.split(',') if t.strip()))
-
-def validate(data):
-    if not isinstance(data, dict):
-        raise ValueError('Cada prompt precisa ser um objeto JSON.')
-    result = {}
-    for key in FIELDS:
-        value = data.get(key, False if key == 'favorite' else '')
-        if key == 'favorite':
-            if type(value) is not bool:
-                raise ValueError('favorite precisa ser true ou false.')
-        elif not isinstance(value, str):
-            raise ValueError(f'O campo {key} precisa ser texto.')
-        result[key] = value
-    if not result['name'].strip() or not result['prompt'].strip():
-        raise ValueError('Nome e prompt são obrigatórios.')
-    result['name'] = result['name'].strip()
-    for key in ('tags', 'genres'):
-        result[key] = ', '.join(terms(result[key]))
-    return result
-
-class Store:
-    def __init__(self, path):
-        self.db = sqlite3.connect(path)
-        self.db.row_factory = sqlite3.Row
-        self.db.execute('''CREATE TABLE IF NOT EXISTS prompts (
-            id INTEGER PRIMARY KEY, name TEXT NOT NULL, tags TEXT NOT NULL,
-            genres TEXT NOT NULL, category TEXT NOT NULL, model TEXT NOT NULL,
-            prompt TEXT NOT NULL, negative TEXT NOT NULL, notes TEXT NOT NULL,
-            favorite INTEGER NOT NULL DEFAULT 0, created TEXT NOT NULL, updated TEXT NOT NULL)''')
-        self.db.commit()
-    def all(self):
-        return [dict(r) for r in self.db.execute('SELECT * FROM prompts ORDER BY favorite DESC, updated DESC, id DESC')]
-    def save(self, data, identifier=None):
-        data = validate(data)
-        now = datetime.now().isoformat(timespec='seconds')
-        values = [data[k] for k in FIELDS]
-        if identifier is None:
-            cur = self.db.execute('INSERT INTO prompts (' + ','.join(FIELDS) + ',created,updated) VALUES (' + ','.join('?' for _ in range(11)) + ')', values + [now, now])
-            return cur.lastrowid
-        self.db.execute('UPDATE prompts SET ' + ','.join(k+'=?' for k in FIELDS) + ',updated=? WHERE id=?', values+[now, identifier])
-        return identifier
+from storage import Store, FIELDS, SHELVES, fold, terms, validate
+from thumbnails import load_thumbnail, normalize_image
+from library_view import LibraryView
+import base64
 
 class Editor(QDialog):
     def __init__(self, parent, data=None):
@@ -84,9 +40,17 @@ class Editor(QDialog):
         form.setSpacing(12)
         scroll.setWidget(body)
         self.inputs = {}
-        labels = {'name':tr('Nome *'), 'tags':tr('Tags (separadas por vírgula)'), 'genres':tr('Gêneros (separados por vírgula)'), 'category':tr('Categoria'), 'model':tr('Modelo / ferramenta'), 'prompt':'Prompt *', 'negative':tr('Prompt negativo'), 'notes':tr('Notas'), 'favorite':tr('Favorito')}
+        labels = {'name':tr('Nome *'), 'tags':tr('Tags (separadas por vírgula)'), 'genres':tr('Gêneros (separados por vírgula)'), 'category':tr('Categoria'), 'model':tr('Modelo / ferramenta'), 'prompt':'Prompt *', 'negative':tr('Prompt negativo'), 'notes':tr('Notas'), 'favorite':tr('Favorito'), 'shelf':tr('Prateleira')}
         for key in FIELDS:
-            if key == 'favorite':
+            if key == 'shelf':
+                field=QComboBox();field.setEditable(True)
+                field.addItems([tr(v) for v in SHELVES])
+                for i,v in enumerate(SHELVES):field.setItemData(i,v)
+                value=(data or {}).get('shelf') or 'Outros'
+                index=field.findData(value)
+                if index>=0:field.setCurrentIndex(index)
+                else:field.setEditText(value)
+            elif key == 'favorite':
                 field = QCheckBox(tr('Marcar como favorito'))
                 field.setChecked(bool((data or {}).get(key, False)))
             elif key in ('prompt', 'negative', 'notes'):
@@ -99,6 +63,14 @@ class Editor(QDialog):
             form.addRow(tr(labels[key]), field)
         self.inputs['category'].setPlaceholderText('Imagem, Texto, Vídeo, Código…')
         self.inputs['genres'].setPlaceholderText('Fantasia, Romance, Ficção científica…')
+        self.thumbnail=parent.store.thumbnail(data['id']) if data and data.get('id') else None
+        self.thumb_preview=QLabel();self.thumb_preview.setFixedHeight(88)
+        self.update_thumbnail()
+        thumb_actions=QHBoxLayout()
+        upload=QPushButton(tr('Escolher miniatura'));upload.clicked.connect(self.choose_thumbnail)
+        remove=QPushButton(tr('Remover miniatura'));remove.clicked.connect(self.remove_thumbnail)
+        thumb_actions.addWidget(upload);thumb_actions.addWidget(remove)
+        form.addRow(tr('Miniatura JPG / PNG'),self.thumb_preview);form.addRow(thumb_actions)
         outer.addWidget(scroll, 1)
         buttons = QDialogButtonBox(QDialogButtonBox.Save | QDialogButtonBox.Cancel)
         buttons.button(QDialogButtonBox.Save).setText(tr('Salvar'))
@@ -107,8 +79,20 @@ class Editor(QDialog):
         buttons.accepted.connect(self.check)
         buttons.rejected.connect(self.reject)
         outer.addWidget(buttons)
+    def update_thumbnail(self):
+        self.thumb_preview.clear()
+        if self.thumbnail:
+            pix=QPixmap();pix.loadFromData(self.thumbnail)
+            self.thumb_preview.setPixmap(pix.scaled(180,88,Qt.KeepAspectRatio,Qt.SmoothTransformation))
+        else:self.thumb_preview.setText(tr('Sem miniatura'))
+    def choose_thumbnail(self):
+        path,_=QFileDialog.getOpenFileName(self,tr('Escolher miniatura'),'','Imagens (*.jpg *.jpeg *.png)')
+        if path:
+            try:self.thumbnail=load_thumbnail(path);self.update_thumbnail()
+            except (ValueError,OSError) as e:QMessageBox.warning(self,tr('Miniatura'),str(e))
+    def remove_thumbnail(self):self.thumbnail=None;self.update_thumbnail()
     def values(self):
-        return {k: (w.isChecked() if k == 'favorite' else w.toPlainText() if isinstance(w, QPlainTextEdit) else w.text()) for k,w in self.inputs.items()}
+        return {k: (w.isChecked() if k == 'favorite' else (w.currentData() if w.currentIndex()>=0 and w.currentText()==w.itemText(w.currentIndex()) else w.currentText()) if isinstance(w,QComboBox) else w.toPlainText() if isinstance(w, QPlainTextEdit) else w.text()) for k,w in self.inputs.items()}
     def check(self):
         try:
             validate(self.values())
@@ -122,6 +106,8 @@ class Window(QMainWindow):
         super().__init__()
         self.store = Store(path)
         self.database_path = path
+        self.offset=0
+        self.page_size=100
         self.setStyleSheet(OWL_STYLE)
         self.setWindowTitle(APP_NAME)
         self.setWindowIcon(QIcon(str(ASSETS / 'prompchu-cabeca.ico')))
@@ -142,14 +128,18 @@ class Window(QMainWindow):
         titles.addWidget(heading);titles.addWidget(subtitle);brand.addLayout(titles,1)
         self.new_button = QPushButton('+  '+tr('Novo prompt'));self.new_button.setObjectName('primary')
         self.new_button.clicked.connect(self.new);brand.addWidget(self.new_button)
-        menu_button=QPushButton(tr('Biblioteca'))
+        menu_button=QPushButton(tr('Arquivo'))
         menu=QMenu(menu_button)
-        for label, callback in [('Importar JSON',self.import_json),('Exportar JSON',self.export_json),('Backup do banco',self.backup)]:
+        for label, callback in [('Importar JSON',self.import_json),('Exportar JSON',self.export_json),('Backup do banco',self.backup),('Abrir demonstração',self.open_demo)]:
             menu.addAction(tr(label),callback)
         menu_button.setMenu(menu);brand.addWidget(menu_button)
+        self.library_button=QPushButton(tr('Biblioteca'));self.library_button.clicked.connect(self.show_library);brand.addWidget(self.library_button)
         about_button=QPushButton(tr('Sobre'));about_button.clicked.connect(self.show_about);brand.addWidget(about_button)
         layout.addWidget(header)
         settings=preferences()
+        self.pages=QStackedWidget();layout.addWidget(self.pages,1)
+        self.home=QWidget();self.pages.addWidget(self.home)
+        home_layout=QVBoxLayout(self.home);home_layout.setContentsMargins(0,0,0,0);home_layout.setSpacing(14)
         controls=QHBoxLayout()
         self.search=QLineEdit();self.search.setClearButtonEnabled(True)
         self.search.setPlaceholderText(tr('Buscar por nome, texto, tags, gêneros, notas…')+'  ·  Ctrl+F')
@@ -160,7 +150,7 @@ class Window(QMainWindow):
         self.language.setToolTip(tr('Idioma'));controls.addWidget(self.language)
         self.neon=QCheckBox(tr('Neon'));self.motion=QCheckBox(tr('Animações'))
         self.neon.setChecked(settings.value('neon',True,type=bool));self.motion.setChecked(settings.value('motion',True,type=bool))
-        controls.addWidget(self.neon);controls.addWidget(self.motion);layout.addLayout(controls)
+        controls.addWidget(self.neon);controls.addWidget(self.motion);home_layout.addLayout(controls)
         split=QSplitter();split.setHandleWidth(14);self.split=split
         library=QFrame();library.setObjectName('card')
         left=QVBoxLayout(library);left.setContentsMargins(16,18,16,16);left.setSpacing(12)
@@ -175,6 +165,10 @@ class Window(QMainWindow):
         left.addWidget(self.items,1)
         self.empty=QLabel(tr('Nenhum resultado. Ajuste os filtros ou crie um prompt.'))
         self.empty.setWordWrap(True);self.empty.setObjectName('muted');left.addWidget(self.empty)
+        pager=QHBoxLayout();self.prev_page=QPushButton('‹');self.next_page=QPushButton('›');self.page_label=QLabel()
+        self.prev_page.setToolTip(tr('Anterior'));self.next_page.setToolTip(tr('Próxima'))
+        self.prev_page.clicked.connect(lambda:self.turn_page(-1));self.next_page.clicked.connect(lambda:self.turn_page(1))
+        pager.addWidget(self.prev_page);pager.addWidget(self.page_label,1);pager.addWidget(self.next_page);left.addLayout(pager)
         split.addWidget(library)
         panel=QFrame();panel.setObjectName('card')
         right=QVBoxLayout(panel);right.setContentsMargins(22,20,22,20);right.setSpacing(12)
@@ -196,14 +190,16 @@ class Window(QMainWindow):
             actions.addWidget(button);self.selection_buttons.append(button)
         right.addLayout(actions)
         split.addWidget(panel);split.setSizes([340,880]);split.setStretchFactor(1,1)
-        layout.addWidget(split,1)
+        home_layout.addWidget(split,1)
+        self.library=LibraryView(self.store);self.pages.addWidget(self.library)
+        self.library.chosen.connect(self.open_prompt);self.library.back.connect(lambda:self.pages.setCurrentWidget(self.home))
         self.lights=Lights(self);self.lights.add(header,18);self.lights.add(self.new_button,9)
         self.panel_light=self.lights.add(panel,16)
         QApplication.instance().focusChanged.connect(self.focus_light)
         self.neon.toggled.connect(self.effects);self.motion.toggled.connect(self.effects)
         self.language.currentIndexChanged.connect(self.change_language)
         self.search.textChanged.connect(self.refresh);self.favorites.toggled.connect(self.refresh)
-        for shortcut,callback in [('Ctrl+N',self.new),('Ctrl+E',self.edit),('Ctrl+F',self.search.setFocus),('Ctrl+Shift+C',self.copy)]:
+        for shortcut,callback in [('Ctrl+N',self.new),('Ctrl+E',self.edit),('Ctrl+F',self.focus_search),('Ctrl+Shift+C',self.copy)]:
             action=QAction(self);action.setShortcut(QKeySequence(shortcut));action.triggered.connect(callback);self.addAction(action)
         self.effects();self.reload()
         geometry=settings.value('geometry')
@@ -212,6 +208,28 @@ class Window(QMainWindow):
         if splitter_state is not None: self.split.restoreState(splitter_state)
         self.statusBar().setToolTip(str(self.database_path))
 
+    def focus_search(self):
+        (self.library.query if self.pages.currentWidget() is self.library else self.search).setFocus()
+    def show_library(self):
+        self.library.refresh_options();self.library.refresh();self.pages.setCurrentWidget(self.library)
+    def open_prompt(self,identifier):
+        self.clear_filters();self.refresh(select=identifier)
+        self.pages.setCurrentWidget(self.home);self.tabs.setCurrentIndex(0)
+    def turn_page(self,direction):
+        self.offset+=direction*self.page_size;self.refresh(keep_page=True)
+    def open_demo(self):
+        import tempfile
+        folder=tempfile.TemporaryDirectory(prefix='prompchu-demo-')
+        window=Window(Path(folder.name)/'demo.sqlite3');window.demo_folder=folder
+        rows=json.loads((ASSETS/'demo-prompts.json').read_text(encoding='utf-8'))['prompts']
+        with window.store.db:
+            for row in rows:
+                identifier=window.store.save(row)
+                window.store.db.execute('UPDATE prompts SET created=?,updated=? WHERE id=?',(row['created'],row['updated'],identifier))
+        window.setWindowTitle(APP_NAME+' · '+tr('Demonstração'))
+        window.reload();window.show_library();window.show()
+        if not hasattr(self,'demo_windows'):self.demo_windows=[]
+        self.demo_windows.append(window)
     def show_about(self):
         AboutDialog(self, VERSION).exec()
 
@@ -234,6 +252,9 @@ class Window(QMainWindow):
     def change_language(self):
         preferences().setValue('language', self.language.currentData())
         replacement = Window(self.database_path)
+        if hasattr(self,'demo_folder'):
+            replacement.demo_folder=self.demo_folder
+            replacement.setWindowTitle(self.windowTitle())
         replacement.setGeometry(self.geometry())
         for source,target in [(self.category,replacement.category),(self.genre,replacement.genre),(self.tag,replacement.tag)]:
             target.setCurrentIndex(max(0,target.findData(source.currentData())))
@@ -248,50 +269,35 @@ class Window(QMainWindow):
         self.close()
 
     def selected(self):
-        item = self.items.currentItem()
-        return item.data(Qt.UserRole) if item else None
+        item=self.items.currentItem()
+        return self.store.get(item.data(Qt.UserRole)['id']) if item else None
     def reload(self, select=None):
-        self.rows = self.store.all()
-        for box, key, label in [(self.category,'category',tr('Todas as categorias')), (self.genre,'genres',tr('Todos os gêneros')), (self.tag,'tags',tr('Todas as tags'))]:
-            old = box.currentData()
-            box.blockSignals(True)
-            box.clear()
-            box.addItem(tr(label), None)
-            options = set()
-            for row in self.rows:
-                options.update(terms(row[key]) if key != 'category' else [row[key]] if row[key] else [])
-            for option in sorted(options, key=fold):
-                box.addItem(option, option)
-            index = box.findData(old)
-            box.setCurrentIndex(max(index, 0))
-            box.blockSignals(False)
-        self.refresh(select=select)
-    def refresh(self, *_args, select=None):
-        current = self.selected()
-        identifier = select if select is not None else current['id'] if current else None
-        self.items.clear()
-        query = fold(self.search.text()).split()
-        for row in self.rows:
-            text = fold(' '.join(str(row[k]) for k in FIELDS))
-            if not all(word in text for word in query):
-                continue
-            if self.favorites.isChecked() and not row['favorite']:
-                continue
-            if self.category.currentData() and row['category'] != self.category.currentData():
-                continue
-            if any(box.currentData() and box.currentData() not in terms(row[key]) for box,key in [(self.genre,'genres'),(self.tag,'tags')]):
-                continue
-            item = QListWidgetItem(('★ ' if row['favorite'] else '') + row['name'] + '\n' + (row['category'] or tr('Sem categoria')) + (' · '+row['tags'] if row['tags'] else ''))
-            item.setData(Qt.UserRole, row)
-            self.items.addItem(item)
-            if row['id'] == identifier:
-                self.items.setCurrentItem(item)
-        if not self.items.currentItem() and self.items.count():
-            self.items.setCurrentRow(0)
-        self.detail()
-        self.collection.setText(tr('Biblioteca') + f'  ·  {self.items.count()} / {len(self.rows)}')
-        self.empty.setVisible(self.items.count() == 0)
-        self.statusBar().showMessage(tr('Salvo neste computador') + '  ·  Ctrl+N / Ctrl+E / Ctrl+Shift+C')
+        for box,key,label in [(self.category,'category','Todas as categorias'),(self.genre,'genres','Todos os gêneros'),(self.tag,'tags','Todas as tags')]:
+            old=box.currentData();box.blockSignals(True);box.clear();box.addItem(tr(label),None)
+            for option in self.store.options(key):box.addItem(option,option)
+            box.setCurrentIndex(max(0,box.findData(old)));box.blockSignals(False)
+        self.refresh(select=select,keep_page=True)
+        self.library.refresh_options()
+    def home_filters(self):
+        return dict(query=self.search.text(),category=self.category.currentData() or '',genre=self.genre.currentData() or '',tags=self.tag.currentData() or '',favorite=self.favorites.isChecked())
+    def refresh(self,*_args,select=None,keep_page=False):
+        current=self.selected();identifier=select if select is not None else current['id'] if current else None
+        if not keep_page:self.offset=0
+        filters=self.home_filters()
+        if select is not None:self.offset=self.store.offset_for(select,self.page_size,**filters)
+        rows,total,self.offset=self.store.page(offset=self.offset,limit=self.page_size,**filters)
+        self.items.blockSignals(True);self.items.clear()
+        for row in rows:
+            item=QListWidgetItem(('★ ' if row['favorite'] else '')+row['name']+'\n'+(row['category'] or tr('Sem categoria'))+(' · '+row['tags'] if row['tags'] else ''))
+            item.setData(Qt.UserRole,row);self.items.addItem(item)
+            if row['id']==identifier:self.items.setCurrentItem(item)
+        if not self.items.currentItem() and self.items.count():self.items.setCurrentRow(0)
+        self.items.blockSignals(False);self.detail()
+        self.collection.setText(tr('Biblioteca')+f' · {total}')
+        self.empty.setVisible(not rows)
+        self.page_label.setText(f'{self.offset//self.page_size+1} / {max(1,(total+self.page_size-1)//self.page_size)}')
+        self.prev_page.setEnabled(self.offset>0);self.next_page.setEnabled(self.offset+len(rows)<total)
+        self.statusBar().showMessage(tr('Salvo neste computador')+' · Ctrl+N / Ctrl+E / Ctrl+Shift+C')
     def detail(self, *_):
         row = self.selected()
         self.title.setText(row['name'] if row else tr('Selecione um prompt ou clique em Novo'))
@@ -316,7 +322,9 @@ class Window(QMainWindow):
             try:
                 with self.store.db:
                     identifier = self.store.save(dialog.values(), None if duplicate or not row else row['id'])
+                    self.store.set_thumbnail(identifier,dialog.thumbnail)
                 self.reload(identifier)
+                self.open_prompt(identifier)
             except (sqlite3.Error, ValueError) as e:
                 QMessageBox.critical(self, 'Erro ao salvar', str(e))
     def new(self): self.editor()
@@ -348,7 +356,10 @@ class Window(QMainWindow):
         if path:
             try:
                 rows = [{k: bool(r[k]) if k == 'favorite' else r[k] for k in FIELDS} for r in self.store.all()]
-                Path(path).write_text(json.dumps({'format':'banco-de-prompts', 'version':1, 'prompts':rows}, ensure_ascii=False, indent=2), encoding='utf-8')
+                for data,row in zip(rows,self.store.all()):
+                    image=self.store.thumbnail(row['id'])
+                    if image:data['thumbnail_png']=base64.b64encode(image).decode('ascii')
+                Path(path).write_text(json.dumps({'format':'banco-de-prompts', 'version':2, 'prompts':rows}, ensure_ascii=False, indent=2), encoding='utf-8')
                 QMessageBox.information(self, 'Exportado', f'{len(rows)} prompts exportados.')
             except OSError as e: QMessageBox.critical(self, 'Erro', str(e))
     def import_json(self):
@@ -359,14 +370,21 @@ class Window(QMainWindow):
                 raise ValueError('O arquivo excede 25 MB.')
             content = json.loads(Path(path).read_text(encoding='utf-8-sig'))
             if isinstance(content, dict):
-                if content.get('format') != 'banco-de-prompts' or content.get('version') != 1:
+                if content.get('format') != 'banco-de-prompts' or content.get('version') not in (1,2):
                     raise ValueError('Formato ou versão desconhecidos.')
                 content = content.get('prompts')
             if not isinstance(content, list): raise ValueError('Esperada uma lista de prompts.')
             rows = [validate(row) for row in content]
+            images=[]
+            for row in content:
+                raw=row.get('thumbnail_png')
+                if raw is not None and not isinstance(raw,str):raise ValueError('Miniatura inválida.')
+                images.append(normalize_image(base64.b64decode(raw,validate=True)) if raw else None)
             if QMessageBox.question(self, 'Importar', f'Adicionar {len(rows)} prompts? Os atuais serão mantidos. Reimportações criam cópias.', QMessageBox.Yes | QMessageBox.No, QMessageBox.No) != QMessageBox.Yes: return
             with self.store.db:
-                for row in rows: self.store.save(row)
+                for row,image in zip(rows,images):
+                    identifier=self.store.save(row)
+                    self.store.set_thumbnail(identifier,image)
             self.reload()
             QMessageBox.information(self, 'Importado', f'{len(rows)} prompts adicionados.')
         except (OSError, ValueError, sqlite3.Error) as e:
@@ -382,6 +400,7 @@ class Window(QMainWindow):
     def closeEvent(self, event):
         preferences().setValue('geometry',self.saveGeometry())
         preferences().setValue('splitter',self.split.saveState())
+        self.library.timer.stop()
         self.wordmark.reset()
         self.lights.timer.stop()
         QApplication.instance().focusChanged.disconnect(self.focus_light)
