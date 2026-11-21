@@ -20,7 +20,7 @@ Também estão disponíveis `prompts-demo.json`, para importar opcionalmente no 
 
 - Windows 10/11 AMD64: extraia o ZIP inteiro e abra `Prompchu/Prompchu.exe`.
 - Linux x86_64: extraia o tar.gz e execute `./Prompchu/Prompchu`. Compilado no Ubuntu 22.04, requer ambiente gráfico e bibliotecas Qt/X11/OpenGL de sistema. Não é AppImage.
-- macOS Apple Silicon: extraia e abra `Prompchu.app`; alvo macOS 14+. Não é para Intel.
+- macOS Apple Silicon: extraia e abra `Prompchu.app`; alvo macOS 15+. Não é para Intel.
 
 Python já está incluído. Builds sem certificado Authenticode ou notarização Apple.
 

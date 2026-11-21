@@ -170,3 +170,5 @@ Use **Novo/Editar → Prateleira** para classificar e **Escolher miniatura** par
 Use **Arquivo → Abrir demonstração** para testar 54 exemplos em uma janela e banco temporários separados. `assets/demo-prompts.json` é importável e `scripts/make_examples.py` gera `examples/prompts-demo.sqlite3`, sem tocar no banco do usuário. Ambos são anexados ao pré-release. Os exemplos não são adicionados automaticamente à coleção pessoal.
 
 **Backup do banco** inclui miniaturas. JSON v2 inclui prateleiras e imagens; a beta aceita v1/v2, mas a versão estável 1.2.0 não importa v2. Faça backup antes de experimentar com seus dados.
+
+A beta usa macOS 15 Apple Silicon na build, pois o ambiente macOS 14 do GitHub Actions foi aposentado.
